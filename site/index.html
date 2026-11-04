@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Blend: build your own microphone</title>
-<meta name="description" content="Blend mixes your mic and the sound of any app into one virtual microphone, with a volume slider for each. Free and open source, for macOS.">
+<meta name="description" content="Blend mixes your mic, any app and system audio into one virtual microphone, with a volume slider for each. Free and open source, for macOS.">
 <meta property="og:title" content="Blend: build your own microphone">
-<meta property="og:description" content="Your mic and the sound of any app, mixed into one microphone you can pick in Discord, a call recorder or anything else.">
+<meta property="og:description" content="Your mic, any app and system audio, mixed into one microphone you can pick in Discord, a call recorder or anything else.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <style>
   :root {
@@ -75,7 +75,7 @@
       <p class="meta">Free and open source · Apple silicon, macOS 15 or later</p>
     </div>
 
-    <div class="panel" role="img" aria-label="Blend's menu bar panel: a mix called Blend Mic, used by Discord, with sliders for the microphone and Spotify">
+    <div class="panel" role="img" aria-label="Blend's menu bar panel: a mix called Blend Mic, used by Discord, with sliders for the microphone, Spotify and system audio">
       <header><span>Blend</span><span>+</span></header>
       <div class="mix">▾ Blend Mic <small><span class="dot"></span>Used by Discord</small></div>
       <div class="source">
@@ -88,14 +88,19 @@
         <div class="slider"><i style="width:34%"></i><b style="left:34%"></b></div>
         <div class="meter" style="--level:30%"></div>
       </div>
+      <div class="source">
+        <span>System audio</span>
+        <div class="slider"><i style="width:50%"></i><b style="left:50%"></b></div>
+        <div class="meter" style="--level:44%"></div>
+      </div>
       <footer><span>Settings…</span><span>Quit Blend</span></footer>
     </div>
   </section>
 
   <section class="points">
     <div class="point">
-      <h2>Your voice plus any app</h2>
-      <p>Music, a game, a browser or a call. Just that app, not the whole Mac.</p>
+      <h2>Your voice plus any sound</h2>
+      <p>One app or everything the Mac plays, without a call hearing itself. Split by channel puts you left and the call right, for recorders.</p>
     </div>
     <div class="point">
       <h2>A slider for each</h2>
