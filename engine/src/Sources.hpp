@@ -119,10 +119,15 @@ private:
 
 // Captures every audio process an app owns (see Apps.hpp), following processes that start
 // after capture began. With an instance, only the copy launched with that identity.
+//
+// System() captures everything the Mac plays instead, except this process and the app
+// copies given to SetExcludedOwners: a mix's "System audio", which leaves out the apps
+// reading that mix so a call through it never hears itself.
 class AppSource : public Source
 {
 public:
     AppSource(std::string bundleID, std::optional<std::string> instance, Retire retire);
+    static std::shared_ptr<AppSource> System(std::string key, Retire retire);
     ~AppSource() override;
 
     bool Start(double busRate, uint32_t busFrames) override;
@@ -135,13 +140,22 @@ public:
     // copy is which.
     void SetMuted(bool muted);
 
+    // Control queue, system audio only: the app copies, by owner pid, to leave out. Takes
+    // effect at the next Start or RefreshProcesses.
+    void SetExcludedOwners(std::vector<int> owners) { excludedOwners_ = std::move(owners); }
+
 private:
     static OSStatus IOProc(AudioObjectID, const AudioTimeStamp*, const AudioBufferList* input,
         const AudioTimeStamp*, AudioBufferList*, const AudioTimeStamp*, void* context);
+    AppSource(std::string key, std::string bundleID, std::optional<std::string> instance,
+        bool system, Retire retire);
+    // The processes to capture, or for system audio the ones to leave out.
     std::vector<AudioObjectID> MatchingProcesses() const;
 
     const std::string bundleID_;
     const std::optional<std::string> instance_;
+    const bool system_ = false;
+    std::vector<int> excludedOwners_;
     bool muted_ = false;
     void* description_ = nullptr; // CATapDescription, retained
     AudioObjectID tap_ = kAudioObjectUnknown;

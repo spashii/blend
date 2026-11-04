@@ -156,6 +156,7 @@ final class AudioCatalog {
         switch source.kind {
         case .device: inputs.contains { $0.uid == source.uid }
         case .app: app(for: source) != nil
+        case .system: true
         }
     }
 

@@ -1,6 +1,7 @@
 // Portable tests for the realtime building blocks; they build and run on Linux and macOS.
 
 #include "../src/FrameRing.hpp"
+#include "../src/MixMath.hpp"
 #include "../src/Resampler.hpp"
 #include "../src/SourceReader.hpp"
 
@@ -178,6 +179,90 @@ void TestStallRecoveryWithLargeSourceBuffer()
     CHECK(reader.Skips() == 1, "a full ring triggers recovery");
 }
 
+
+// A block of interleaved stereo frames with a sine on both channels.
+std::vector<float> StereoSine(uint32_t frames, double freq, float amplitude)
+{
+    std::vector<float> x(frames * 2);
+    for (uint32_t i = 0; i < frames; i++) {
+        x[i * 2] = x[i * 2 + 1] = amplitude * float(std::sin(2 * M_PI * freq * i / 48000));
+    }
+    return x;
+}
+
+double ChannelDb(const std::vector<float>& acc, int channel)
+{
+    double sum = 0;
+    for (size_t i = channel; i < acc.size(); i += 2) {
+        sum += double(acc[i]) * acc[i];
+    }
+    return 10 * std::log10(sum / (acc.size() / 2) + 1e-30);
+}
+
+// Split layout: the microphone only on the left, the app only on the right, each at the
+// level it came in at.
+void TestSplitRouting()
+{
+    const uint32_t frames = 4800;
+    auto mic = StereoSine(frames, 440, 0.5f);
+    auto app = StereoSine(frames, 1000, 0.5f);
+    std::vector<float> acc(frames * 2, 0.0f);
+    blend::AddSource(acc.data(), mic.data(), frames, 1, 1, 1, blend::Route::Left);
+    blend::AddSource(acc.data(), app.data(), frames, 1, 1, 1, blend::Route::Right);
+    std::vector<float> left(frames), right(frames);
+    for (uint32_t i = 0; i < frames; i++) {
+        left[i] = acc[i * 2];
+        right[i] = acc[i * 2 + 1];
+    }
+    CHECK(ResidualDb(left, 0, 440, 48000) < -120, "left carries only the mic: %.1f dB",
+        ResidualDb(left, 0, 440, 48000));
+    CHECK(ResidualDb(right, 0, 1000, 48000) < -120, "right carries only the app: %.1f dB",
+        ResidualDb(right, 0, 1000, 48000));
+    const double expected = 20 * std::log10(0.5 / std::sqrt(2.0));
+    CHECK(std::fabs(ChannelDb(acc, 0) - expected) < 0.1, "mic level kept: %.2f dB", ChannelDb(acc, 0));
+    CHECK(std::fabs(ChannelDb(acc, 1) - expected) < 0.1, "app level kept: %.2f dB", ChannelDb(acc, 1));
+}
+
+// The usual layout still puts every source on both channels.
+void TestStereoRouting()
+{
+    const uint32_t frames = 480;
+    std::vector<float> src(frames * 2);
+    for (uint32_t i = 0; i < frames; i++) {
+        src[i * 2] = 0.25f;
+        src[i * 2 + 1] = -0.5f;
+    }
+    std::vector<float> acc(frames * 2, 0.0f);
+    blend::AddSource(acc.data(), src.data(), frames, 1, 1, 0.5f, blend::Route::Both);
+    CHECK(acc[10] == 0.125f && acc[11] == -0.25f, "stereo kept: %f %f", acc[10], acc[11]);
+}
+
+// A call at full scale on the right: unlinked, the left keeps its level; linked, as in the
+// usual layout, both sides come down together.
+void TestLimiterLinking()
+{
+    const uint32_t frames = 4800;
+    const float limit = 0.891f;
+    const float release = 1.0f - std::exp(-1.0f / (0.1f * 48000));
+    auto run = [&](bool linked) {
+        auto me = StereoSine(frames, 440, 0.25f);
+        auto call = StereoSine(frames, 1000, 2.0f);
+        std::vector<float> acc(frames * 2, 0.0f);
+        blend::AddSource(acc.data(), me.data(), frames, 1, 1, 1, blend::Route::Left);
+        blend::AddSource(acc.data(), call.data(), frames, 1, 1, 1, blend::Route::Right);
+        blend::LimiterState state;
+        const float peak = blend::Limit(acc.data(), frames, linked, limit, release, state);
+        CHECK(peak <= limit, "held at the limit: %f", peak);
+        return ChannelDb(acc, 0);
+    };
+    const double untouched = 20 * std::log10(0.25 / std::sqrt(2.0));
+    const double unlinked = run(false);
+    const double linked = run(true);
+    CHECK(std::fabs(unlinked - untouched) < 0.05, "unlinked left untouched: %.2f vs %.2f dB",
+        unlinked, untouched);
+    CHECK(linked < untouched - 6, "linked left pulled down: %.2f dB", linked);
+}
+
 } // namespace
 
 int main()
@@ -194,6 +279,9 @@ int main()
     TestDriftControl(48000, -150, 512, 128, 600);
     TestDriftControl(24000, +80, 480, 256, 600);
     TestDriftControl(44100, -40, 441, 512, 600);
+    TestSplitRouting();
+    TestStereoRouting();
+    TestLimiterLinking();
     std::printf(failures ? "%d FAILED\n" : "all passed\n", failures);
     return failures ? 1 : 0;
 }

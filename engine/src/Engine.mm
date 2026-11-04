@@ -174,6 +174,8 @@ std::shared_ptr<Source> Engine::SourceFor(const SourceConfig& config)
     std::shared_ptr<Source> source;
     if (config.kind == SourceConfig::Kind::App) {
         source = std::make_shared<AppSource>(config.bundleID, config.instance, retire);
+    } else if (config.kind == SourceConfig::Kind::System) {
+        source = AppSource::System(key, retire);
     } else {
         source = std::make_shared<DeviceSource>(key, config.uid, config.echoCancel,
             MicProcessor::ParseIsolation(config.isolation), retire);
@@ -229,6 +231,7 @@ void Engine::ReadMixDevice(MixDevice& entry)
 {
     entry.running = false;
     entry.users.clear();
+    entry.userOwners.clear();
     if (entry.device == kAudioObjectUnknown) {
         return;
     }
@@ -253,6 +256,10 @@ void Engine::ReadMixDevice(MixDevice& entry)
                 continue;
             }
             const int owner = pid > 0 ? OwnerPID(pid) : 0;
+            if (owner && std::find(entry.userOwners.begin(), entry.userOwners.end(), owner) ==
+                    entry.userOwners.end()) {
+                entry.userOwners.push_back(owner);
+            }
             std::string name = owner ? AppName(owner) : "";
             if (name.empty()) {
                 NSString* bundleID = client[@"bundleID"];
@@ -287,6 +294,7 @@ void Engine::ResolveMixDevices()
                     auto it = mixDevices_.find(id);
                     if (it != mixDevices_.end()) {
                         ReadMixDevice(it->second);
+                        UpdateSystemExclusions();
                         Reconcile();
                     }
                 };
@@ -305,6 +313,32 @@ void Engine::ResolveMixDevices()
         }
         RemoveMixListener(it->second);
         it = mixDevices_.erase(it);
+    }
+    UpdateSystemExclusions();
+}
+
+// Each mix's system audio leaves out the apps reading that mix, before it starts and
+// whenever they change.
+void Engine::UpdateSystemExclusions()
+{
+    for (const auto& mix : config_.mixes) {
+        auto device = mixDevices_.find(mix.id);
+        const std::vector<int> owners =
+            device != mixDevices_.end() ? device->second.userOwners : std::vector<int>{};
+        for (const auto& source : mix.sources) {
+            if (source.kind != SourceConfig::Kind::System) {
+                continue;
+            }
+            auto it = sources_.find(source.Key());
+            if (it == sources_.end()) {
+                continue;
+            }
+            auto system = std::static_pointer_cast<AppSource>(it->second);
+            system->SetExcludedOwners(owners);
+            if (system->Live()) {
+                system->RefreshProcesses();
+            }
+        }
     }
 }
 
@@ -407,13 +441,18 @@ void Engine::PublishGraph()
         plan.id = mix.id;
         plan.slot = mix.slot;
         plan.gain = mix.muted ? 0 : DbToGain(mix.gainDb);
+        plan.split = mix.split;
         plan.state = mixStates_[mix.id];
-        for (const auto& source : mix.sources) {
+        for (size_t position = 0; position < mix.sources.size(); position++) {
+            const auto& source = mix.sources[position];
             auto it = index.find(source.Key());
             if (it == index.end()) {
                 continue;
             }
             plan.sources.push_back(it->second);
+            plan.routes.push_back(!mix.split ? Route::Both
+                    : position == 0             ? Route::Left
+                                                : Route::Right);
             plan.targets.push_back(source.muted ? 0 : DbToGain(source.gainDb));
         }
         plan.current = std::make_unique<std::atomic<float>[]>(plan.sources.size());
@@ -667,35 +706,20 @@ void Engine::Render(AudioBufferList* output)
                 const float* src = &scratch_[mix.sources[e] * kMaxFrames * 2];
                 const float from = mix.current[e].load(std::memory_order_relaxed);
                 const float to = mix.targets[e];
-                const float step = (to - from) / float(frames);
-                for (uint32_t i = 0; i < frames; i++) {
-                    const float g = (from + step * float(i)) * mix.gain;
-                    acc[i * 2] += src[i * 2] * g;
-                    acc[i * 2 + 1] += src[i * 2 + 1] * g;
-                }
+                AddSource(acc, src, frames, from, to, mix.gain, mix.routes[e]);
                 mix.current[e].store(to, std::memory_order_relaxed);
             }
-            // Peak limiter: instant attack, ~100 ms release, then a hard ceiling for the
-            // first sample of a transient.
+            // ~100 ms release. The split layout limits each side on its own.
             MixState& state = *mix.state;
-            float gain = state.limiterGain;
-            float peak = state.peak.load(std::memory_order_relaxed);
             const float release = 1.0f - std::exp(-1.0f / (0.1f * float(busRate_)));
+            const float blockPeak = Limit(acc, frames, !mix.split, kLimit, release, state.limiter);
             float* slot = out + mix.slot * 2;
             for (uint32_t i = 0; i < frames; i++) {
-                const float level = std::max(std::fabs(acc[i * 2]), std::fabs(acc[i * 2 + 1]));
-                const float target = level > kLimit ? kLimit / level : 1.0f;
-                gain = target < gain ? target : gain + (target - gain) * release;
-                const float l = std::clamp(acc[i * 2] * gain, -kLimit, kLimit);
-                const float r = std::clamp(acc[i * 2 + 1] * gain, -kLimit, kLimit);
-                acc[i * 2] = l;
-                acc[i * 2 + 1] = r;
-                slot[i * channels] = l;
-                slot[i * channels + 1] = r;
-                peak = std::max(peak, std::max(std::fabs(l), std::fabs(r)));
+                slot[i * channels] = acc[i * 2];
+                slot[i * channels + 1] = acc[i * 2 + 1];
             }
-            state.limiterGain = gain;
-            state.peak.store(peak, std::memory_order_relaxed);
+            state.peak.store(std::max(state.peak.load(std::memory_order_relaxed), blockPeak),
+                std::memory_order_relaxed);
             const uint64_t at = state.written.load(std::memory_order_relaxed);
             for (uint32_t i = 0; i < frames; i++) {
                 const size_t h = size_t((at + i) % kHistoryFrames) * 2;
@@ -883,8 +907,10 @@ std::string Engine::Diagnostics()
         out << "bus " << (busRunning_ ? "running" : "stopped") << " rate " << busRate_
             << " frames " << busFrames_ << " cycles " << cycles_.load() << "\n";
         for (const auto& [id, mix] : mixDevices_) {
-            out << "mix " << id << " device " << mix.device << (mix.running ? " running" : "")
-                << (checking_ == id ? " checking" : "");
+            const bool split = std::any_of(config_.mixes.begin(), config_.mixes.end(),
+                [&](const MixConfig& m) { return m.id == id && m.split; });
+            out << "mix " << id << " device " << mix.device << (split ? " split" : "")
+                << (mix.running ? " running" : "") << (checking_ == id ? " checking" : "");
             for (const auto& user : mix.users) {
                 out << " used-by=\"" << user << "\"";
             }

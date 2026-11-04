@@ -10,6 +10,7 @@
 // once, and Status, CopyCheck and ProbeLevels read a snapshot the queue publishes.
 
 #include "Config.hpp"
+#include "MixMath.hpp"
 #include "Sources.hpp"
 
 #include <CoreAudio/CoreAudio.h>
@@ -69,7 +70,7 @@ private:
     {
         MixState();
         std::atomic<float> peak{0};
-        float limiterGain = 1; // bus thread only
+        LimiterState limiter; // bus thread only
         // Recent output, written by the bus thread; `written` counts frames ever written.
         std::vector<float> history;
         std::atomic<uint64_t> written{0};
@@ -81,7 +82,9 @@ private:
         std::string id;
         uint32_t slot = 0;
         float gain = 1;
+        bool split = false;                            // see MixMath.hpp
         std::vector<uint32_t> sources;                 // index into Graph::sources
+        std::vector<Route> routes;                     // per entry
         std::vector<float> targets;                    // linear gain per entry
         std::unique_ptr<std::atomic<float>[]> current; // ramped gain per entry
         std::shared_ptr<MixState> state;
@@ -98,6 +101,7 @@ private:
         AudioObjectID device = kAudioObjectUnknown;
         bool running = false;
         std::vector<std::string> users;
+        std::vector<int> userOwners; // the app copies reading it, by owner pid
         AudioObjectPropertyListenerBlock listener = nullptr;
     };
 
@@ -137,6 +141,7 @@ private:
     void RemoveMixListener(MixDevice& entry);
     static void ReadMixDevice(MixDevice& entry);
     void RetryFailedSources();
+    void UpdateSystemExclusions();
 
     // Bus thread.
     static OSStatus BusProc(AudioObjectID, const AudioTimeStamp*, const AudioBufferList*,

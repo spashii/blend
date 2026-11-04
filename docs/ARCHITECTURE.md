@@ -24,10 +24,10 @@ app audio (process tap) ──┘
 
 ## Engine
 
-- A source is either an input device, captured with an IOProc on that device, or an app, captured with a Core Audio process tap of every process the app owns. The tap sits in a private aggregate device clocked by the default output.
+- A source is an input device, captured with an IOProc on that device; an app, captured with a Core Audio process tap of every process the app owns; or system audio, a global tap that excludes Blend and every app copy reading that mix (from the driver's client list), updated as readers come and go. A tap sits in a private aggregate device clocked by the default output.
 - Each source writes into a lock-free ring at its own clock and rate. The bus thread reads every ring through a variable-ratio polyphase resampler (32 taps, 256 phases, Kaiser window), steered by a proportional controller on the ring's fill level with a 2 second time constant, clamped to ±0.5%. This is the approach of PipeWire and JACK's `alsa_in`.
 - The mixing graph (sources, and the gains of each mix) is swapped with one atomic pointer, and the old graph is freed after the bus thread has moved past it. The bus thread never allocates or locks. Gain changes ramp over one buffer, so sliders never click.
-- Every mix ends in a peak limiter at -1 dBFS.
+- Every mix ends in a peak limiter at -1 dBFS. A mix of two sources can be split: the first source, folded to mono, goes to the left channel only and the second to the right only, and the limiter then works on each channel on its own (`engine/src/MixMath.hpp`). Blend describes every mix for other apps in `devices.json` ([MIXES-FOR-APPS.md](MIXES-FOR-APPS.md)).
 - A source runs only while an app reads a mix that uses it, or while a mix is being checked. The orange microphone dot and the purple app audio dot in the menu bar mean real use.
 - After coreaudiod restarts, the engine rebuilds everything from the configuration. A device that reconnects or changes rate (AirPods switching to their call mode) is captured again, and a source that fails to start is retried every 2 seconds.
 - Each mix keeps its last 6 seconds in memory for checking on speakers: Blend records 5 seconds and then plays them back, because listening live through speakers would feed back into the microphone. On headphones it plays the mix live.

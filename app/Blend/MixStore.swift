@@ -50,12 +50,12 @@ final class MixStore {
     }
 
     @discardableResult
-    func create(name: String, sources: [MixSource]) -> Mix? {
+    func create(name: String, sources: [MixSource], split: Bool = false) -> Mix? {
         let used = Set(mixes.map(\.slot))
         guard let slot = (0..<16).first(where: { !used.contains($0) }) else {
             return nil
         }
-        let mix = Mix(id: MixSource.newID(), name: name, slot: slot, sources: sources)
+        let mix = Mix(id: MixSource.newID(), name: name, slot: slot, split: split, sources: sources)
         mixes.append(mix)
         mixes.sort { $0.slot < $1.slot }
         write(mix)
