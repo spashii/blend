@@ -1,0 +1,89 @@
+name: Blend
+options:
+  bundleIdPrefix: app.blend
+  deploymentTarget:
+    macOS: "15.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    ARCHS: arm64
+    # tools/build.sh and tools/release.sh set these from the VERSION file.
+    MARKETING_VERSION: "0.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # Where CMake put the engine library and the driver.
+    BLEND_BUILD_DIR: $(SRCROOT)/../build
+targets:
+  Blend:
+    type: application
+    platform: macOS
+    sources:
+      - path: Blend
+        excludes: ["*.h", "*.entitlements", "*.sh"]
+      # Run as root when the driver is installed or removed.
+      - path: Blend/restart-audio.sh
+        buildPhase: resources
+      # Shipped inside the app, as the licenses of the included libraries require.
+      - path: ../LICENSE
+        buildPhase: resources
+      - path: ../THIRD_PARTY_NOTICES.md
+        buildPhase: resources
+    info:
+      path: Blend/Info.plist
+      properties:
+        CFBundleDisplayName: Blend
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSMinimumSystemVersion: "15.0"
+        LSUIElement: true
+        LSApplicationCategoryType: public.app-category.utilities
+        NSHumanReadableCopyright: Free software under the MIT License.
+        NSMicrophoneUsageDescription: Blend mixes your microphone into the virtual microphones you create.
+        NSAudioCaptureUsageDescription: Blend captures audio from the apps you add to a mix.
+    entitlements:
+      path: Blend/Blend.entitlements
+      properties:
+        com.apple.security.device.audio-input: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.blend.Blend
+        SWIFT_OBJC_BRIDGING_HEADER: Blend/Blend-Bridging-Header.h
+        HEADER_SEARCH_PATHS: $(SRCROOT)/../engine/include
+        LIBRARY_SEARCH_PATHS: $(BLEND_BUILD_DIR)/engine $(BLEND_BUILD_DIR)/webrtc/lib
+        OTHER_LDFLAGS: -lBlendEngine -lwebrtc-apm -lc++
+        # Ad hoc ("Sign to Run Locally") unless the build scripts pass an identity. The
+        # hardened runtime is on so the same build can be notarized.
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: ""
+        ENABLE_HARDENED_RUNTIME: YES
+        # Debug builds otherwise put the code in a separate library, which the hardened
+        # runtime refuses to load under a certificate without a team.
+        ENABLE_DEBUG_DYLIB: NO
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+      configs:
+        # Xcode otherwise adds the debugger entitlement to every build, and notarization
+        # rejects an app that carries it.
+        Release:
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+    postBuildScripts:
+      # The app carries the driver it was built with and installs it from Setup. The
+      # driver is signed by its own CMake build; the app's signature then seals it.
+      - name: Embed driver
+        basedOnDependencyAnalysis: false
+        script: |
+          src="$BLEND_BUILD_DIR/driver/BlendDriver.driver"
+          dst="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/PlugIns/BlendDriver.driver"
+          if [ ! -d "$src" ]; then
+            echo "error: $src is missing; build the driver with CMake first (tools/build.sh does both)"
+            exit 1
+          fi
+          rm -rf "$dst"
+          mkdir -p "$(dirname "$dst")"
+          ditto "$src" "$dst"
+    dependencies:
+      - sdk: CoreAudio.framework
+      - sdk: AVFoundation.framework
+      - sdk: AudioToolbox.framework
+      - sdk: AppKit.framework
+      - sdk: ServiceManagement.framework

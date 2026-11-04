@@ -1,0 +1,20 @@
+name: Build
+
+# A check that a clean macOS machine can build and test Blend, run by hand. Releases are
+# built, signed and notarized with tools/release.sh on a Mac that holds the Developer ID.
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build tools
+        run: brew install ninja meson xcodegen
+      - name: Build, test and package
+        run: tools/release.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Blend
+          path: build/release/Blend-*.dmg*
