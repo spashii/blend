@@ -1,0 +1,177 @@
+#pragma once
+
+// Audio sources the engine mixes: input devices and app audio taps. Each one runs its own
+// IO thread at its own clock and rate, and the bus thread pulls from it through a
+// SourceReader that brings it onto the bus clock.
+
+#include "FrameRing.hpp"
+#include "MicProcessor.hpp"
+#include "SourceReader.hpp"
+
+#include <CoreAudio/CoreAudio.h>
+
+#include <atomic>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace blend {
+
+// Runs a deleter once the bus thread can no longer hold the object it frees.
+using Retire = std::function<void(std::function<void()>)>;
+
+class Source
+{
+public:
+    Source(std::string key, Retire retire);
+    virtual ~Source();
+
+    const std::string& Key() const { return key_; }
+    bool Live() const { return stream_.load(std::memory_order_acquire) != nullptr; }
+
+    // Control queue.
+    virtual bool Start(double busRate, uint32_t busFrames) = 0;
+    virtual void Stop() = 0;
+    // True when the capture must be rebuilt: its device was replaced or changed rate.
+    virtual bool NeedsRestart() const { return false; }
+    // Extra state for diagnostics, starting with a space, or empty.
+    virtual std::string Detail() const { return {}; }
+
+    // Bus thread: writes `frames` stereo frames at the bus rate, silence when not live.
+    void Pull(float* stereo, uint32_t frames);
+    float TakePeak() { return peak_.exchange(0, std::memory_order_relaxed); }
+    // Peak of what the source captured, whether or not the bus pulls it; for meters in
+    // the source picker.
+    float TakeProducedPeak() { return producedPeak_.exchange(0, std::memory_order_relaxed); }
+
+    struct Stats
+    {
+        uint64_t underruns = 0;
+        uint64_t skips = 0;
+        uint64_t overflows = 0;
+        double correction = 1;
+        double sourceRate = 0;
+    };
+    Stats GetStats() const;
+
+protected:
+    struct Stream
+    {
+        Stream(double sourceRate, double busRate, uint32_t sourceFrames, uint32_t busFrames);
+        double rate;
+        FrameRing ring;
+        SourceReader reader;
+    };
+
+    // Called by Start once the source's rate and buffer size are known.
+    void Publish(double sourceRate, double busRate, uint32_t sourceFrames, uint32_t busFrames);
+    // Called by Stop after the source's IO has stopped.
+    void Unpublish();
+    // Source IO thread: converts any channel layout to stereo and queues it.
+    void Produce(const AudioBufferList* input);
+
+    const std::string key_;
+    const Retire retire_;
+
+private:
+    std::atomic<Stream*> stream_{nullptr};
+    std::vector<float> stereo_;
+    std::atomic<float> peak_{0};
+    std::atomic<float> producedPeak_{0};
+};
+
+// An input device, optionally with echo cancellation and voice isolation (MicProcessor).
+// With echo cancellation it records the device and a tap of everything the Mac plays
+// through one private aggregate device, so the echo reference arrives with the microphone.
+class DeviceSource : public Source
+{
+public:
+    DeviceSource(std::string key, std::string uid, bool echoCancel,
+        MicProcessor::Isolation isolation, Retire retire);
+    ~DeviceSource() override;
+
+    bool Start(double busRate, uint32_t busFrames) override;
+    void Stop() override;
+    bool NeedsRestart() const override;
+    std::string Detail() const override;
+
+private:
+    static OSStatus IOProc(AudioObjectID, const AudioTimeStamp*, const AudioBufferList* input,
+        const AudioTimeStamp*, AudioBufferList*, const AudioTimeStamp*, void* context);
+    static void Emit(void* context, const float* mono, uint32_t frames);
+    bool AddReference();
+
+    const std::string uid_;
+    const bool echoCancel_;
+    const MicProcessor::Isolation isolation_;
+    AudioObjectID device_ = kAudioObjectUnknown;
+    // The device itself, or the aggregate that adds the echo reference to it.
+    AudioObjectID ioDevice_ = kAudioObjectUnknown;
+    AudioObjectID tap_ = kAudioObjectUnknown;
+    AudioObjectID aggregate_ = kAudioObjectUnknown;
+    UInt32 micChannels_ = 0;
+    AudioDeviceIOProcID proc_ = nullptr;
+    double rate_ = 0;
+    std::unique_ptr<MicProcessor> processor_;
+};
+
+// Captures every audio process an app owns (see Apps.hpp), following processes that start
+// after capture began. With an instance, only the copy launched with that identity.
+class AppSource : public Source
+{
+public:
+    AppSource(std::string bundleID, std::optional<std::string> instance, Retire retire);
+    ~AppSource() override;
+
+    bool Start(double busRate, uint32_t busFrames) override;
+    void Stop() override;
+
+    // Control queue: re-reads the process list and updates the live tap if it changed.
+    void RefreshProcesses();
+
+    // Control queue: silences the app's own output while true, so a person can hear which
+    // copy is which.
+    void SetMuted(bool muted);
+
+private:
+    static OSStatus IOProc(AudioObjectID, const AudioTimeStamp*, const AudioBufferList* input,
+        const AudioTimeStamp*, AudioBufferList*, const AudioTimeStamp*, void* context);
+    std::vector<AudioObjectID> MatchingProcesses() const;
+
+    const std::string bundleID_;
+    const std::optional<std::string> instance_;
+    bool muted_ = false;
+    void* description_ = nullptr; // CATapDescription, retained
+    AudioObjectID tap_ = kAudioObjectUnknown;
+    AudioObjectID aggregate_ = kAudioObjectUnknown;
+    AudioDeviceIOProcID proc_ = nullptr;
+    std::vector<AudioObjectID> processes_;
+};
+
+// Plays one mix to the default output in real time, for checking it on headphones. The
+// bus thread feeds it and the output device's IO thread pulls it, through the same ring
+// and drift control a source uses, with the roles reversed.
+class MonitorOutput : public Source
+{
+public:
+    explicit MonitorOutput(Retire retire);
+    ~MonitorOutput() override;
+
+    bool Start(double busRate, uint32_t busFrames) override;
+    void Stop() override;
+
+    // Bus thread.
+    void Feed(const float* stereo, uint32_t frames);
+
+private:
+    static OSStatus IOProc(AudioObjectID, const AudioTimeStamp*, const AudioBufferList*,
+        const AudioTimeStamp*, AudioBufferList* output, const AudioTimeStamp*, void* context);
+
+    AudioObjectID device_ = kAudioObjectUnknown;
+    AudioDeviceIOProcID proc_ = nullptr;
+    std::vector<float> scratch_;
+};
+
+} // namespace blend

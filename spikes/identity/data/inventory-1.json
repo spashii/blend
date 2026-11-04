@@ -1,0 +1,377 @@
+{
+  "apps": [
+    {
+      "alive": true,
+      "args": [
+        "/System/Library/CoreServices/Finder.app/Contents/MacOS/Finder"
+      ],
+      "bundleID": "com.apple.finder",
+      "bundlePath": "/System/Library/CoreServices/Finder.app",
+      "directories": [],
+      "launched": 0,
+      "name": "Finder",
+      "pid": 1827
+    },
+    {
+      "alive": true,
+      "args": [
+        "/Applications/Firefox.app/Contents/MacOS/firefox",
+        "-url",
+        "about:editprofile",
+        "-foreground"
+      ],
+      "bundleID": "org.mozilla.firefox",
+      "bundlePath": "/Applications/Firefox.app",
+      "directories": [],
+      "launched": 1793219389.936203,
+      "name": "Firefox",
+      "pid": 2297
+    },
+    {
+      "alive": true,
+      "args": [
+        "/Applications/Firefox.app/Contents/MacOS/firefox",
+        "-foreground",
+        "--profile",
+        "/Users/me/Library/Application Support/Firefox/Profiles/k3v9xq2a.default-release",
+        "--profiles-activate"
+      ],
+      "bundleID": "org.mozilla.firefox",
+      "bundlePath": "/Applications/Firefox.app",
+      "directories": [
+        "/Users/me/Library/Application Support/Firefox/Profiles/k3v9xq2a.default-release"
+      ],
+      "launched": 1793219513.735345,
+      "name": "Firefox",
+      "pid": 2401
+    },
+    {
+      "alive": false,
+      "args": [],
+      "bundleID": "com.apple.TextEdit",
+      "bundlePath": "/System/Applications/TextEdit.app",
+      "directories": [],
+      "launched": 1793685022.789175,
+      "name": "TextEdit",
+      "pid": 39614
+    },
+    {
+      "alive": true,
+      "args": [
+        "/Applications/Firefox.app/Contents/MacOS/firefox",
+        "--profile",
+        "/Users/me/Library/Application Support/Firefox/Profiles/p7d2mf0c.Profile 2"
+      ],
+      "bundleID": "org.mozilla.firefox",
+      "bundlePath": "/Applications/Firefox.app",
+      "directories": [
+        "/Users/me/Library/Application Support/Firefox/Profiles/p7d2mf0c.Profile 2"
+      ],
+      "launched": 1793699134.483992,
+      "name": "Firefox",
+      "pid": 41359
+    },
+    {
+      "alive": true,
+      "args": [
+        "/Applications/Firefox.app/Contents/MacOS/firefox",
+        "-foreground",
+        "--profile",
+        "/Users/me/Library/Application Support/Firefox/Profiles/w1n8zt4e.Profile 3",
+        "--profiles-activate"
+      ],
+      "bundleID": "org.mozilla.firefox",
+      "bundlePath": "/Applications/Firefox.app",
+      "directories": [
+        "/Users/me/Library/Application Support/Firefox/Profiles/w1n8zt4e.Profile 3"
+      ],
+      "launched": 1793732876.9268389,
+      "name": "Firefox",
+      "pid": 44970
+    },
+    {
+      "alive": true,
+      "args": [
+        "/Applications/Firefox.app/Contents/MacOS/firefox",
+        "--new-instance",
+        "--profile",
+        "/tmp/blend-identity/ff-A",
+        "file:///tmp/blend-identity/440.html"
+      ],
+      "bundleID": "org.mozilla.firefox",
+      "bundlePath": "/Applications/Firefox.app",
+      "directories": [
+        "/tmp/blend-identity/ff-A"
+      ],
+      "launched": 1793739533.9927533,
+      "name": "Firefox",
+      "pid": 50485
+    },
+    {
+      "alive": true,
+      "args": [
+        "/Applications/Firefox.app/Contents/MacOS/firefox",
+        "--new-instance",
+        "--profile",
+        "/tmp/blend-identity/ff-B",
+        "file:///tmp/blend-identity/660.html"
+      ],
+      "bundleID": "org.mozilla.firefox",
+      "bundlePath": "/Applications/Firefox.app",
+      "directories": [
+        "/tmp/blend-identity/ff-B"
+      ],
+      "launched": 1793739537.055409,
+      "name": "Firefox",
+      "pid": 50503
+    },
+    {
+      "alive": true,
+      "args": [
+        "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+        "--user-data-dir=/tmp/blend-identity/brave-X",
+        "--no-first-run",
+        "--autoplay-policy=no-user-gesture-required",
+        "file:///tmp/blend-identity/550.html"
+      ],
+      "bundleID": "com.brave.Browser",
+      "bundlePath": "/Applications/Brave Browser.app",
+      "directories": [
+        "/tmp/blend-identity/brave-X"
+      ],
+      "launched": 1793739537.1128137,
+      "name": "Brave Browser",
+      "pid": 50505
+    },
+    {
+      "alive": true,
+      "args": [
+        "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+        "--user-data-dir=/tmp/blend-identity/brave-Y",
+        "--no-first-run",
+        "--autoplay-policy=no-user-gesture-required",
+        "file:///tmp/blend-identity/330.html"
+      ],
+      "bundleID": "com.brave.Browser",
+      "bundlePath": "/Applications/Brave Browser.app",
+      "directories": [
+        "/tmp/blend-identity/brave-Y"
+      ],
+      "launched": 1793739540.2662349,
+      "name": "Brave Browser",
+      "pid": 50546
+    },
+    {
+      "alive": true,
+      "args": [
+        "/System/Applications/TextEdit.app/Contents/MacOS/TextEdit"
+      ],
+      "bundleID": "com.apple.TextEdit",
+      "bundlePath": "/System/Applications/TextEdit.app",
+      "directories": [],
+      "launched": 1793739540.350364,
+      "name": "TextEdit",
+      "pid": 50556
+    },
+    {
+      "alive": true,
+      "args": [
+        "/System/Applications/TextEdit.app/Contents/MacOS/TextEdit"
+      ],
+      "bundleID": "com.apple.TextEdit",
+      "bundlePath": "/System/Applications/TextEdit.app",
+      "directories": [],
+      "launched": 1793739540.4848351,
+      "name": "TextEdit",
+      "pid": 50560
+    }
+  ],
+  "audio": [
+    {
+      "args": [
+        "/System/Library/CoreServices/PowerChime.app/Contents/MacOS/PowerChime"
+      ],
+      "bundleID": "com.apple.PowerChime",
+      "name": "PowerChime",
+      "object": 216,
+      "parent": 1,
+      "pid": 11425,
+      "playing": false,
+      "recording": false,
+      "responsible": 11425,
+      "responsibleBundleID": "com.apple.PowerChime"
+    },
+    {
+      "args": [
+        "/Applications/Firefox.app/Contents/MacOS/firefox",
+        "-foreground",
+        "--profile",
+        "/Users/me/Library/Application Support/Firefox/Profiles/k3v9xq2a.default-release",
+        "--profiles-activate"
+      ],
+      "bundleID": "org.mozilla.firefox",
+      "name": "firefox",
+      "object": 217,
+      "parent": 1,
+      "pid": 2401,
+      "playing": false,
+      "recording": false,
+      "responsible": 2401,
+      "responsibleBundleID": "org.mozilla.firefox"
+    },
+    {
+      "args": [
+        "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU"
+      ],
+      "bundleID": "com.apple.WebKit.GPU",
+      "name": "com.apple.WebKit.GPU",
+      "object": 218,
+      "parent": 1,
+      "pid": 43491,
+      "playing": false,
+      "recording": false,
+      "responsible": 43485,
+      "responsibleBundleID": "com.raycast.macos"
+    },
+    {
+      "args": [
+        "/Applications/Firefox.app/Contents/MacOS/firefox",
+        "-url",
+        "about:editprofile",
+        "-foreground"
+      ],
+      "bundleID": "org.mozilla.firefox",
+      "name": "firefox",
+      "object": 220,
+      "parent": 1,
+      "pid": 2297,
+      "playing": false,
+      "recording": false,
+      "responsible": 2297,
+      "responsibleBundleID": "org.mozilla.firefox"
+    },
+    {
+      "args": [
+        "/System/Library/CoreServices/ControlCenter.app/Contents/MacOS/ControlCenter"
+      ],
+      "bundleID": "com.apple.controlcenter",
+      "name": "ControlCenter",
+      "object": 223,
+      "parent": 1,
+      "pid": 1137,
+      "playing": false,
+      "recording": false,
+      "responsible": 1137,
+      "responsibleBundleID": "com.apple.controlcenter"
+    },
+    {
+      "args": [
+        "/Applications/Firefox.app/Contents/MacOS/firefox",
+        "-foreground",
+        "--profile",
+        "/Users/me/Library/Application Support/Firefox/Profiles/w1n8zt4e.Profile 3",
+        "--profiles-activate"
+      ],
+      "bundleID": "org.mozilla.firefox",
+      "name": "firefox",
+      "object": 240,
+      "parent": 1,
+      "pid": 44970,
+      "playing": false,
+      "recording": false,
+      "responsible": 44970,
+      "responsibleBundleID": "org.mozilla.firefox"
+    },
+    {
+      "args": [
+        "/Applications/Firefox.app/Contents/MacOS/firefox",
+        "--new-instance",
+        "--profile",
+        "/tmp/blend-identity/ff-A",
+        "file:///tmp/blend-identity/440.html"
+      ],
+      "bundleID": "org.mozilla.firefox",
+      "name": "firefox",
+      "object": 245,
+      "parent": 1,
+      "pid": 50485,
+      "playing": true,
+      "recording": false,
+      "responsible": 50485,
+      "responsibleBundleID": "org.mozilla.firefox"
+    },
+    {
+      "args": [
+        "/Applications/Firefox.app/Contents/MacOS/firefox",
+        "--new-instance",
+        "--profile",
+        "/tmp/blend-identity/ff-B",
+        "file:///tmp/blend-identity/660.html"
+      ],
+      "bundleID": "org.mozilla.firefox",
+      "name": "firefox",
+      "object": 246,
+      "parent": 1,
+      "pid": 50503,
+      "playing": true,
+      "recording": false,
+      "responsible": 50503,
+      "responsibleBundleID": "org.mozilla.firefox"
+    },
+    {
+      "args": [
+        "/Applications/Brave Browser.app/Contents/Frameworks/Brave Browser Framework.framework/Versions/156.1.98.62/Helpers/Brave Browser Helper.app/Contents/MacOS/Brave Browser Helper",
+        "--type=utility",
+        "--utility-sub-type=audio.mojom.AudioService",
+        "--lang=en-US",
+        "--service-sandbox-type=audio",
+        "--message-loop-type-ui",
+        "--user-data-dir=/tmp/blend-identity/brave-X",
+        "--shared-files",
+        "--metrics-shmem-handle=1752395122,r,702354671444954345,7558421521851392437,524288",
+        "--field-trial-handle=1718379636,r,784269126833961022,18145353654213099868,262144",
+        "--variations-seed-version=main@5d031ffbaa57099d5fb7597b987b205f3a64db45",
+        "--pseudonymization-salt-handle=1935764596,r,12047019087823084917,9136807533054372617,4",
+        "--trace-process-track-uuid=3190708998493415531",
+        "--seatbelt-client=150"
+      ],
+      "bundleID": "com.brave.Browser.helper",
+      "name": "Brave Browser Helper",
+      "object": 247,
+      "parent": 50505,
+      "pid": 50538,
+      "playing": true,
+      "recording": false,
+      "responsible": 50505,
+      "responsibleBundleID": "com.brave.Browser"
+    },
+    {
+      "args": [
+        "/Applications/Brave Browser.app/Contents/Frameworks/Brave Browser Framework.framework/Versions/156.1.98.62/Helpers/Brave Browser Helper.app/Contents/MacOS/Brave Browser Helper",
+        "--type=utility",
+        "--utility-sub-type=audio.mojom.AudioService",
+        "--lang=en-US",
+        "--service-sandbox-type=audio",
+        "--message-loop-type-ui",
+        "--user-data-dir=/tmp/blend-identity/brave-Y",
+        "--shared-files",
+        "--metrics-shmem-handle=1752395122,r,2513516375434825247,465378996631842919,524288",
+        "--field-trial-handle=1718379636,r,44356070019217071,4177412132745316011,262144",
+        "--variations-seed-version=main@5d031ffbaa57099d5fb7597b987b205f3a64db45",
+        "--pseudonymization-salt-handle=1935764596,r,5584049608665912418,8806266324143920975,4",
+        "--trace-process-track-uuid=3190708994745248135",
+        "--seatbelt-client=92"
+      ],
+      "bundleID": "com.brave.Browser.helper",
+      "name": "Brave Browser Helper",
+      "object": 248,
+      "parent": 50546,
+      "pid": 50578,
+      "playing": true,
+      "recording": false,
+      "responsible": 50546,
+      "responsibleBundleID": "com.brave.Browser"
+    }
+  ],
+  "taken": 1793739546.71033
+}

@@ -1,0 +1,6 @@
+build/
+build-linux/
+app/Blend.xcodeproj/
+app/Blend/Info.plist
+app/Blend/Blend.entitlements
+__pycache__/
