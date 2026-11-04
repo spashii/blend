@@ -77,7 +77,13 @@ struct Mix: Codable, Hashable, Identifiable, Sendable {
     /// With exactly two sources: the first on the left channel only, the second on the
     /// right only, so a recorder can tell them apart. Ignored with any other number.
     var split = false
-    var sources: [MixSource] = []
+    /// A split ends when the mix stops having two sources, so adding a different second
+    /// source later doesn't quietly split it again.
+    var sources: [MixSource] = [] {
+        didSet {
+            if sources.count != 2 { split = false }
+        }
+    }
 
     var isSplit: Bool {
         split && sources.count == 2
