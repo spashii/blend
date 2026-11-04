@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>Blend</title>
+    <link>https://spashii.github.io/blend/</link>
+    <description>Blend releases, read by the app's Check for Updates.</description>
+    <language>en</language>
+    <!-- tools/release.sh adds each release below this line. -->
+    <item>
+      <title>Blend 0.2.0</title>
+      <pubDate>Wed, 04 Nov 2026 11:28:23 +0000</pubDate>
+      <sparkle:version>0.2.0</sparkle:version>
+      <sparkle:shortVersionString>0.2.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/spashii/blend/releases/download/v0.2.0/Blend-0.2.0.dmg" sparkle:edSignature="QHjrPAXajW/kfx5j6pbZlnGpzW/4rC7VavbSH80RQUelq/56qvrWS4eSP3nFoRuX0kQhrOsp4ngD1pDDOLN4DQ==" length="2402633" type="application/octet-stream"/>
+    </item>
+  </channel>
+</rss>
