@@ -317,11 +317,24 @@ std::string DeviceSource::Detail() const
 // AppSource
 
 AppSource::AppSource(std::string bundleID, std::optional<std::string> instance, Retire retire)
-    : Source(instance ? "app:" + bundleID + "#" + *instance : "app:" + bundleID,
-          std::move(retire))
+    : AppSource(instance ? "app:" + bundleID + "#" + *instance : "app:" + bundleID, bundleID,
+          instance, false, std::move(retire))
+{
+}
+
+AppSource::AppSource(std::string key, std::string bundleID, std::optional<std::string> instance,
+    bool system, Retire retire)
+    : Source(std::move(key), std::move(retire))
     , bundleID_(std::move(bundleID))
     , instance_(std::move(instance))
+    , system_(system)
 {
+}
+
+std::shared_ptr<AppSource> AppSource::System(std::string key, Retire retire)
+{
+    return std::shared_ptr<AppSource>(
+        new AppSource(std::move(key), {}, std::nullopt, true, std::move(retire)));
 }
 
 AppSource::~AppSource()
@@ -337,7 +350,8 @@ OSStatus AppSource::IOProc(AudioObjectID, const AudioTimeStamp*, const AudioBuff
 }
 
 // Every audio process whose owning app copy is this source's app, and, with an instance,
-// the copy launched with that identity.
+// the copy launched with that identity. For system audio: this process, whose output
+// carries the mixes, and every process of the excluded app copies.
 std::vector<AudioObjectID> AppSource::MatchingProcesses() const
 {
     std::vector<AudioObjectID> matches;
@@ -345,6 +359,15 @@ std::vector<AudioObjectID> AppSource::MatchingProcesses() const
              kAudioHardwarePropertyProcessObjectList)) {
         pid_t pid = -1;
         hal::Get(object, kAudioProcessPropertyPID, pid);
+        if (system_) {
+            const int owner = pid > 0 ? OwnerPID(pid) : 0;
+            if (pid == getpid() ||
+                (owner && std::find(excludedOwners_.begin(), excludedOwners_.end(), owner) !=
+                        excludedOwners_.end())) {
+                matches.push_back(object);
+            }
+            continue;
+        }
         const int owner = pid > 0 ? OwnerPID(pid) : 0;
         if (!owner || AppBundleID(owner) != bundleID_) {
             continue;
@@ -373,9 +396,11 @@ bool AppSource::Start(double busRate, uint32_t busFrames)
         return true;
     }
     processes_ = MatchingProcesses();
-    CATapDescription* description =
-        [[CATapDescription alloc] initStereoMixdownOfProcesses:Numbers(processes_)];
-    description.name = [NSString stringWithFormat:@"Blend: %s", bundleID_.c_str()];
+    CATapDescription* description = system_
+        ? [[CATapDescription alloc] initStereoGlobalTapButExcludeProcesses:Numbers(processes_)]
+        : [[CATapDescription alloc] initStereoMixdownOfProcesses:Numbers(processes_)];
+    description.name = system_ ? @"Blend: system audio"
+                               : [NSString stringWithFormat:@"Blend: %s", bundleID_.c_str()];
     description.privateTap = YES;
     description.muteBehavior = muted_ ? CATapMuted : CATapUnmuted;
     if (AudioHardwareCreateProcessTap(description, &tap_) != noErr) {

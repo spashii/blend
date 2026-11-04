@@ -5,19 +5,20 @@ Build your own microphone on your Mac.
 Blend is a free, open source menu bar app for macOS that makes virtual microphones. In each one, called a mix, you choose what goes in (your microphones and the sound of other apps) and set a volume for each, like a volume mixer for your microphone. Any app that lets you pick a microphone can pick a mix: Discord, a call recorder, OBS, a website in your browser. Setup is one page, and a new mix asks only for a name and a microphone.
 
 - **Music in a voice chat.** Your microphone and a music player, with the music turned down, picked as the input in Discord.
-- **A recorder that hears the whole call.** Your microphone and the call app, picked as the input of a recording app.
+- **A recorder that hears the whole call.** Your microphone and system audio, split by channel so the recorder gets you on the left and the call on the right.
 - **A video or a demo in a call or a stream.** Your microphone and a browser or any other app, picked in a call app or OBS.
 - **One mix for each app.** Several mixes can be in use at once, so Discord can use one while a recorder uses another.
 
 ## Features
 
 - Up to 16 mixes, each a microphone with its own name. Several can be in use at once, in different apps.
-- Sources: microphones and other input devices, and the sound of any app. When several copies of an app run, such as two Firefox profiles, each copy can be added on its own.
+- Sources: microphones and other input devices, the sound of any app, and system audio: everything the Mac plays except the apps using that mix, so a call through the mix never hears itself. When several copies of an app run, such as two Firefox profiles, each copy can be added on its own.
+- Split by channel: a mix of two sources can put the first on the left channel and the second on the right, for recorders that keep the two sides of a call apart. Apps that read only one channel then hear only the first source, so turn it off for a call app.
 - Volume, mute and a level meter for every source, and mute and a level meter for every mix.
 - Echo cancellation (WebRTC AEC3) and Apple's voice isolation, set per microphone.
 - A check button: on headphones you hear the mix live; on speakers Blend records five seconds and plays them back.
 - Shows which apps are using each mix. Warns when a source in use is disconnected or closed, when a microphone gives no sound, and when an app in a mix has also picked that mix as its microphone, so it would hear itself.
-- A limiter at -1 dBFS on every mix, so loud sources don't clip.
+- A limiter at -1 dBFS on every mix, so loud sources don't clip. A split mix limits each channel on its own, so a loud call can't turn your voice down.
 
 ## Requirements
 

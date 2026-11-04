@@ -139,6 +139,12 @@ private struct MixEditor: View {
                     }
                 }
                 AddSourceButton(mix: $mix)
+                if mix.sources.count == 2 {
+                    Toggle(isOn: $mix.split) {
+                        Text("Split by channel")
+                        Text(mix.splitDescription)
+                    }
+                }
             }
 
             Section {
@@ -270,7 +276,7 @@ private struct AddSourceButton: View {
             Label("Add Source…", systemImage: "plus")
         }
         .sheet(isPresented: $picking) {
-            SourcePicker { source in
+            SourcePicker(offerSystem: !mix.sources.contains { $0.kind == .system }) { source in
                 mix.sources.append(source)
             }
         }
@@ -282,6 +288,8 @@ private struct AddSourceButton: View {
 private struct SourcePicker: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    /// A mix needs System audio only once.
+    let offerSystem: Bool
     let add: (MixSource) -> Void
     @State private var levels: [String: Float] = [:]
     /// When each app last made sound; its meter stays for a minute after, so rows don't
@@ -308,6 +316,21 @@ private struct SourcePicker: View {
                                 pick(.device(uid: input.uid, name: input.name,
                                     processing: Processing(echoCancel: true, isolation: .off)))
                             }
+                        }
+                    }
+                }
+                if offerSystem {
+                    Section {
+                        HStack {
+                            Image(systemName: "laptopcomputer").frame(width: 22)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("System audio")
+                                Text("Everything your Mac plays, except apps using this mix")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Add") { pick(.system()) }
                         }
                     }
                 }
@@ -430,21 +453,36 @@ private struct AppRow: View {
 /// A name and a microphone; everything else is added in the mix itself, where each
 /// source has its volume.
 private struct NewMixSheet: View {
+    enum Preset: Hashable {
+        case microphone
+        /// Split by channel from the start, for recording; off again for a call.
+        case micAndSystem
+    }
+
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    @State private var preset = Preset.microphone
     @State private var name = ""
     @State private var micUID: String?
 
     var body: some View {
         Form {
             Section {
+                Picker("Preset", selection: $preset) {
+                    Text("Microphone").tag(Preset.microphone)
+                    Text("Mic and system audio").tag(Preset.micAndSystem)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
                 TextField("Name", text: $name, prompt: Text(suggestedName))
                 Picker("Microphone", selection: $micUID) {
                     Text("None").tag(String?.none)
                     ForEach(model.catalog.inputs) { Text($0.name).tag(Optional($0.uid)) }
                 }
             } footer: {
-                Text("Other apps list it as \u{201C}\(effectiveName)\u{201D}. Add apps and other sources to it next.")
+                Text(preset == .microphone
+                    ? "Other apps list it as \u{201C}\(effectiveName)\u{201D}. Add apps and other sources to it next."
+                    : "Other apps list it as \u{201C}\(effectiveName)\u{201D}, with your mic on the left and system audio on the right.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -482,11 +520,15 @@ private struct NewMixSheet: View {
     private func create() {
         // Echo cancellation on, so the mix works on speakers; isolation is left to the
         // person, since it adds delay.
-        let sources = model.catalog.inputs.first { $0.uid == micUID }.map { mic in
+        var sources = model.catalog.inputs.first { $0.uid == micUID }.map { mic in
             [MixSource.device(uid: mic.uid, name: mic.name,
                 processing: Processing(echoCancel: true, isolation: .off))]
         } ?? []
-        if let mix = model.store.create(name: effectiveName, sources: sources) {
+        if preset == .micAndSystem {
+            sources.append(.system())
+        }
+        if let mix = model.store.create(name: effectiveName, sources: sources,
+            split: preset == .micAndSystem) {
             model.selection = mix.id
         }
         dismiss()

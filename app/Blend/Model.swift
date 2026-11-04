@@ -26,6 +26,9 @@ struct MixSource: Codable, Hashable, Identifiable, Sendable {
     enum Kind: String, Codable, Sendable {
         case device
         case app
+        /// Everything the Mac plays, except Blend and the apps using this mix, so an app on
+        /// a call through the mix never hears itself.
+        case system
     }
 
     var id: String = MixSource.newID()
@@ -54,6 +57,10 @@ struct MixSource: Codable, Hashable, Identifiable, Sendable {
     static func app(_ app: RunningApp) -> MixSource {
         MixSource(kind: .app, bundleID: app.bundleID, instance: app.instance, name: app.name)
     }
+
+    static func system() -> MixSource {
+        MixSource(kind: .system, name: "System audio")
+    }
 }
 
 /// A preset: one named virtual microphone and everything it carries.
@@ -67,5 +74,33 @@ struct Mix: Codable, Hashable, Identifiable, Sendable {
     var slot: Int
     var gainDb: Double = 0
     var muted = false
+    /// With exactly two sources: the first on the left channel only, the second on the
+    /// right only, so a recorder can tell them apart. Ignored with any other number.
+    var split = false
     var sources: [MixSource] = []
+
+    var isSplit: Bool {
+        split && sources.count == 2
+    }
+
+    /// "MacBook Air Microphone on the left, System audio on the right", for two sources.
+    var splitDescription: String {
+        guard sources.count == 2 else { return "" }
+        return "\(sources[0].name) on the left, \(sources[1].name) on the right"
+    }
+}
+
+extension Mix {
+    /// Files written before a field existed decode with its default.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try c.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? Mix.currentSchema
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        slot = try c.decode(Int.self, forKey: .slot)
+        gainDb = try c.decodeIfPresent(Double.self, forKey: .gainDb) ?? 0
+        muted = try c.decodeIfPresent(Bool.self, forKey: .muted) ?? false
+        split = try c.decodeIfPresent(Bool.self, forKey: .split) ?? false
+        sources = try c.decodeIfPresent([MixSource].self, forKey: .sources) ?? []
+    }
 }

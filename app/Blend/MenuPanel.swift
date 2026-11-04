@@ -147,6 +147,12 @@ private struct MixRow: View {
                         issue: model.issue(source, at: index, in: mix))
                         .padding(.leading, 20)
                 }
+                if mix.sources.count == 2 {
+                    SplitToggle(mix: mix)
+                        .toggleStyle(.checkbox)
+                        .font(.caption)
+                        .padding(.leading, 20)
+                }
                 if mix.sources.isEmpty {
                     Text("Nothing in this mix yet. Add your mic or an app in Settings.")
                         .font(.caption)
@@ -205,6 +211,21 @@ private struct SourceSlider: View {
     }
 }
 
+/// Only a mix of exactly two sources can be split, so the toggle exists only for those.
+struct SplitToggle: View {
+    @Environment(AppModel.self) private var model
+    let mix: Mix
+
+    var body: some View {
+        Toggle("Split by channel", isOn: Binding(get: { mix.split }, set: { on in
+            var updated = mix
+            updated.split = on
+            model.store.update(updated)
+        }))
+        .help(mix.splitDescription)
+    }
+}
+
 struct LevelMeter: View {
     let level: Float
 
@@ -242,12 +263,20 @@ struct GainSlider: View {
 }
 
 extension MixSource {
+    var symbol: String {
+        switch kind {
+        case .device: "mic"
+        case .app: "app.dashed"
+        case .system: "laptopcomputer"
+        }
+    }
+
     var mutedSymbol: String {
         switch (kind, muted) {
         case (.device, true): "mic.slash.fill"
         case (.device, false): "mic.fill"
-        case (.app, true): "speaker.slash.fill"
-        case (.app, false): "speaker.wave.2.fill"
+        case (.app, true), (.system, true): "speaker.slash.fill"
+        case (.app, false), (.system, false): "speaker.wave.2.fill"
         }
     }
 }
@@ -261,7 +290,7 @@ struct SourceIcon: View {
             if source.kind == .app, let icon = model.catalog.icon(for: source) {
                 Image(nsImage: icon).resizable()
             } else {
-                Image(systemName: source.kind == .app ? "app.dashed" : "mic")
+                Image(systemName: source.symbol)
                     .resizable()
                     .scaledToFit()
                     .padding(2)

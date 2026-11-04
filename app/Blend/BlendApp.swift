@@ -68,6 +68,7 @@ final class AppModel {
 
     let store = MixStore()
     let engine = EngineBridge()
+    let shared = SharedMixes()
     let catalog = AudioCatalog()
     let player = RecentPlayer()
     let setup = Setup()
@@ -82,8 +83,10 @@ final class AppModel {
         check = MixCheck(engine: engine, player: player)
         store.onChange = { [weak self] mixes in
             self?.engine.apply(mixes)
+            self?.shared.write(mixes)
         }
         engine.apply(store.mixes)
+        shared.write(store.mixes)
         if !setupComplete {
             selection = Self.generalTag
         }
@@ -169,6 +172,10 @@ final class AppModel {
                let name = NSRunningApplication(processIdentifier: app.pid)?.localizedName,
                status.users.contains(name) {
                 return SourceIssue(text: "\(name) is also using this mix, so it hears itself", urgent: true)
+            }
+        case .system:
+            if setup.appAudio == .denied {
+                return SourceIssue(text: "Blend isn't allowed to capture app audio", urgent: active)
             }
         }
         if active {

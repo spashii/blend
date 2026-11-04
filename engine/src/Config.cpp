@@ -34,6 +34,9 @@ bool ParseConfig(const std::string& text, Config& config, std::string& error)
                     if (source.uid.rfind("app.blend.", 0) == 0) {
                         continue;
                     }
+                } else if (kind == "system") {
+                    source.kind = SourceConfig::Kind::System;
+                    source.mixID = mix.id;
                 } else if (kind == "app") {
                     source.kind = SourceConfig::Kind::App;
                     source.bundleID = s.at("bundleID").get<std::string>();
@@ -53,6 +56,7 @@ bool ParseConfig(const std::string& text, Config& config, std::string& error)
                 }
                 mix.sources.push_back(std::move(source));
             }
+            mix.split = m.value("split", false) && mix.sources.size() == 2;
             parsed.mixes.push_back(std::move(mix));
         }
         config = std::move(parsed);
