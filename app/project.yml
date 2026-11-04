@@ -13,6 +13,11 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     # Where CMake put the engine library and the driver.
     BLEND_BUILD_DIR: $(SRCROOT)/../build
+packages:
+  # Updates: checks the appcast on the website and installs signed releases.
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.10.1
 targets:
   Blend:
     type: application
@@ -40,6 +45,9 @@ targets:
         NSHumanReadableCopyright: Free software under the MIT License.
         NSMicrophoneUsageDescription: Blend mixes your microphone into the virtual microphones you create.
         NSAudioCaptureUsageDescription: Blend captures audio from the apps you add to a mix.
+        SUFeedURL: https://spashii.github.io/blend/appcast.xml
+        # Updates must be signed with the matching private key, kept with the Developer ID.
+        SUPublicEDKey: YLvPSGEaYiPsXphy/q9LCDGs2s0qp8hM2LVBIWbl78c=
     entitlements:
       path: Blend/Blend.entitlements
       properties:
@@ -82,6 +90,7 @@ targets:
           mkdir -p "$(dirname "$dst")"
           ditto "$src" "$dst"
     dependencies:
+      - package: Sparkle
       - sdk: CoreAudio.framework
       - sdk: AVFoundation.framework
       - sdk: AudioToolbox.framework

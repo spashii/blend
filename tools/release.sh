@@ -59,6 +59,19 @@ xcodebuild -project app/Blend.xcodeproj -scheme Blend -configuration Release \
   BLEND_BUILD_DIR=$cmakeDir MARKETING_VERSION=$version CURRENT_PROJECT_VERSION=$version \
   CODE_SIGN_IDENTITY="$identity" ${signFlags:+OTHER_CODE_SIGN_FLAGS="$signFlags"} build
 app=$out/xcode/Build/Products/Release/Blend.app
+# Xcode signs the Sparkle framework it embeds but not the helpers inside it, and
+# notarization needs every one signed with the Developer ID. This is the order Sparkle's
+# documentation gives for an app that isn't sandboxed; the app is signed again last, since
+# its signature covers the framework's.
+sparkleFramework=$app/Contents/Frameworks/Sparkle.framework
+if [[ $identity != - && -d $sparkleFramework ]]; then
+  helpers=$sparkleFramework/Versions/B
+  for code in $helpers/XPCServices/Installer.xpc $helpers/XPCServices/Downloader.xpc \
+    $helpers/Autoupdate $helpers/Updater.app $sparkleFramework $app; do
+    codesign --force --sign "$identity" --options runtime --preserve-metadata=entitlements \
+      $signFlags $code
+  done
+fi
 codesign --verify --deep --strict $app
 codesign --verify --strict $app/Contents/PlugIns/BlendDriver.driver
 
@@ -85,4 +98,29 @@ if [[ -n $profile ]]; then
   spctl --assess --type open --context context:primary-signature -v $dmg
 fi
 (cd $out && shasum -a 256 ${dmg:t} | tee ${dmg:t}.sha256)
+
+# A notarized image becomes the newest entry in the update feed and the Homebrew cask. Both
+# are files in the repo, published by committing them with the GitHub release.
+sparkle=${BLEND_SPARKLE_DIR:-$HOME/.blend-signing/sparkle-2.10.1}
+sparkleKey=${BLEND_SPARKLE_KEY:-$HOME/.blend-signing/sparkle-private-key}
+releases=${BLEND_RELEASES_URL:-https://github.com/spashii/blend/releases/download}
+if [[ -n $profile && -f $sparkleKey ]]; then
+  signature=$($sparkle/bin/sign_update --ed-key-file $sparkleKey $dmg)
+  item="    <item>
+      <title>Blend $version</title>
+      <pubDate>$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')</pubDate>
+      <sparkle:version>$version</sparkle:version>
+      <sparkle:shortVersionString>$version</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <enclosure url=\"$releases/v$version/${dmg:t}\" $signature type=\"application/octet-stream\"/>
+    </item>"
+  ITEM=$item VERSION=$version perl -0pi -e '
+    s{\s*<item>(?:(?!</item>).)*<sparkle:version>\Q$ENV{VERSION}\E</sparkle:version>.*?</item>}{}s;
+    s{(<!-- tools/release.sh adds each release below this line. -->)}{$1\n$ENV{ITEM}}' site/appcast.xml
+  sha=$(cut -d' ' -f1 $dmg.sha256)
+  sed -i '' -e "s/^  version \".*\"/  version \"$version\"/" -e "s/^  sha256 \".*\"/  sha256 \"$sha\"/" \
+    Casks/blend.rb
+  echo "Updated site/appcast.xml and Casks/blend.rb. To publish: gh release create v$version $dmg $dmg.sha256,"
+  echo "then commit and push both files."
+fi
 echo "$dmg"

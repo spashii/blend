@@ -25,7 +25,14 @@ A Mac with Apple silicon and macOS 15 or later.
 
 ## Install
 
-1. Download `Blend-VERSION.dmg` from [Releases](../../releases), open it, and drag Blend to Applications.
+1. Download `Blend-VERSION.dmg` from [Releases](../../releases), open it, and drag Blend to Applications. Or install it with Homebrew:
+
+   ```sh
+   brew tap spashii/blend https://github.com/spashii/blend
+   brew trust spashii/blend
+   brew install --cask blend
+   ```
+
 2. Open Blend. It is signed with a Developer ID and notarized, so macOS only asks whether to open an app downloaded from the internet. Click **Open**.
 3. Blend opens to its Setup page. Go through the four steps:
    - **Install the audio driver.** This is what makes mixes appear as microphones. It asks for an administrator password once, and sound pauses for a moment while the Mac's audio restarts.
@@ -33,7 +40,7 @@ A Mac with Apple silicon and macOS 15 or later.
    - **Allow audio from other apps.**
    - **Open at login.** Mixes are silent while Blend is closed, so this is worth turning on.
 
-To build Blend from source, see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+Blend updates itself: on its second launch it asks whether to check for updates automatically, and General has a Check for Updates button. Updates are signed, and Blend installs only ones signed with its own key. To build Blend from source, see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ## Using Blend
 
@@ -52,13 +59,13 @@ Good to know:
 
 ## Privacy
 
-Blend works entirely on your Mac. It has no network code, no analytics and no accounts. Your mixes are stored in `~/Library/Application Support/Blend`. Audio passes through memory only, and the recording made to check a mix is discarded after it plays.
+Blend works entirely on your Mac. It has no analytics and no accounts, and the only thing it fetches from the internet is the list of releases when it checks for updates (with [Sparkle](https://sparkle-project.org), sending nothing about you or your Mac). Your mixes are stored in `~/Library/Application Support/Blend`. Audio passes through memory only, and the recording made to check a mix is discarded after it plays.
 
 Blend uses the microphone and other apps' audio only while an app is using a mix that needs them, while you check a mix, and (to show which apps are making sound) while you are choosing a source.
 
 ## Uninstall
 
-In the Blend window, choose General and click **Uninstall Blend**. It removes the driver, your mixes and Blend's settings, then moves Blend to the Trash.
+In the Blend window, choose General and click **Uninstall Blend**. It removes the driver, your mixes and Blend's settings, then moves Blend to the Trash. With Homebrew, `brew uninstall --zap --cask blend` does the same.
 
 To do it by hand:
 
