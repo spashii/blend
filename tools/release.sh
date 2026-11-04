@@ -1,7 +1,9 @@
 #!/bin/zsh
-# Builds the release disk image: tools/release.sh
+# Builds the release disk image: tools/release.sh [--publish]
 #
 # Output: build/release/Blend-VERSION.dmg with Blend.app, which carries the driver.
+# --publish then uploads it as GitHub release vVERSION and pushes the update feed and the
+# Homebrew cask that point at it; it needs a clean, pushed checkout and gh logged in.
 # With tools/release-identity.sh set up, it signs with that Developer ID, then notarizes and
 # staples both the app and the image, so Blend opens on any Mac without a Gatekeeper
 # warning, offline too. BLEND_SIGN_ID and BLEND_NOTARY_PROFILE use an identity and a
@@ -10,6 +12,20 @@ set -euo pipefail
 root=${0:A:h:h}
 cd $root
 version=$(<VERSION)
+publish=false
+if [[ ${1:-} == --publish ]]; then
+  publish=true
+  # The release is built from HEAD and tagged there, so HEAD has to be exactly what is on
+  # GitHub; these checks fail when GitHub can't be reached, rather than passing.
+  [[ -z $(git status --porcelain) ]] || { print -u2 "Commit everything first."; exit 1 }
+  git fetch -q origin
+  [[ $(git rev-parse HEAD) == $(git rev-parse "@{u}") ]] || { print -u2 "Push HEAD first."; exit 1 }
+  gh auth status >/dev/null
+  if [[ -n $(gh release list --json tagName -q ".[] | select(.tagName == \"v$version\")") ]]; then
+    print -u2 "v$version is already released; raise VERSION."
+    exit 1
+  fi
+fi
 identity=${BLEND_SIGN_ID:--}
 profile=${BLEND_NOTARY_PROFILE:-}
 keychain=
@@ -120,7 +136,19 @@ if [[ -n $profile && -f $sparkleKey ]]; then
   sha=$(cut -d' ' -f1 $dmg.sha256)
   sed -i '' -e "s/^  version \".*\"/  version \"$version\"/" -e "s/^  sha256 \".*\"/  sha256 \"$sha\"/" \
     Casks/blend.rb
-  echo "Updated site/appcast.xml and Casks/blend.rb. To publish: gh release create v$version $dmg $dmg.sha256,"
-  echo "then commit and push both files."
+fi
+if $publish; then
+  [[ -n $profile && -f $sparkleKey ]] || {
+    print -u2 "Not published: a release needs the Developer ID, notarization and the update key."
+    exit 1
+  }
+  # The image goes up before the feed that offers it.
+  gh release create v$version $dmg $dmg.sha256 --target $(git rev-parse HEAD) \
+    --title "Blend $version" --generate-notes
+  git commit -q -m "Blend $version" site/appcast.xml Casks/blend.rb
+  git push -q
+  echo "Published v$version."
+elif [[ -n $profile && -f $sparkleKey ]]; then
+  echo "Updated site/appcast.xml and Casks/blend.rb; tools/release.sh --publish uploads and pushes."
 fi
 echo "$dmg"

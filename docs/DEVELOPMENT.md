@@ -67,11 +67,12 @@ From then on `tools/release.sh` signs with that identity and notarizes and stapl
 
 Updates go through [Sparkle](https://sparkle-project.org) and must be signed with an EdDSA key whose public half is `SUPublicEDKey` in `app/project.yml`. Keep the private key, base64 encoded, at `~/.blend-signing/sparkle-private-key` (Sparkle's `generate_keys -x` writes that format) with Sparkle's tools unpacked at `~/.blend-signing/sparkle-2.10.1`, or point `BLEND_SPARKLE_KEY` and `BLEND_SPARKLE_DIR` elsewhere. Losing this key means installed copies can't take updates any more, so keep a copy with the Developer ID key.
 
-With the key in place, a notarized `tools/release.sh` also adds the release to the update feed, `site/appcast.xml`, and to the Homebrew cask, `Casks/blend.rb`. The version comes from `VERSION`. To publish, upload the image first, then push the feed, so no copy of Blend is offered an update that isn't there yet:
+With the key in place, a notarized build also adds the release to the update feed, `site/appcast.xml`, and to the Homebrew cask, `Casks/blend.rb`. To publish one, raise `VERSION` (semver: patch for fixes, minor for anything new), commit and push, then run:
 
 ```sh
-gh release create v$(<VERSION) build/release/Blend-$(<VERSION).dmg build/release/Blend-$(<VERSION).dmg.sha256
-git commit -m "Blend $(<VERSION)" site/appcast.xml Casks/blend.rb && git push
+tools/release.sh --publish
 ```
+
+It builds and notarizes, uploads the image as GitHub release `vVERSION`, then commits and pushes the feed and the cask, in that order so no copy of Blend is offered an update that isn't there yet. It needs `gh` logged in.
 
 The website is `site/`, published to GitHub Pages by `.github/workflows/pages.yml` when it changes on main.
