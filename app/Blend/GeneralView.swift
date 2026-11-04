@@ -9,6 +9,7 @@ struct GeneralView: View {
 
     var body: some View {
         let setup = model.setup
+        @Bindable var updates = model.updates
         Form {
             Section {
                 DriverRow()
@@ -34,8 +35,15 @@ struct GeneralView: View {
             }
 
             Section("About") {
-                LabeledContent("Version", value: versionText)
-                Text("Blend works entirely on this Mac. It doesn't connect to the internet or collect anything.")
+                LabeledContent("Version") {
+                    HStack {
+                        Text(versionText)
+                        Button("Check for Updates…") { model.updates.check() }
+                            .disabled(!model.updates.canCheck)
+                    }
+                }
+                Toggle("Check for updates automatically", isOn: $updates.automatic)
+                Text("Blend works on this Mac and collects nothing. It goes online only to check for updates.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 Button("Licenses") { openLicenses() }

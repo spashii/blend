@@ -71,6 +71,7 @@ final class AppModel {
     let catalog = AudioCatalog()
     let player = RecentPlayer()
     let setup = Setup()
+    let updates = Updates()
     let check: MixCheck
     var selection: String?
     var showingNewMix = false
