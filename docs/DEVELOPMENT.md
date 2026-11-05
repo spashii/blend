@@ -67,6 +67,8 @@ From then on `tools/release.sh` signs with that identity and notarizes and stapl
 
 Updates go through [Sparkle](https://sparkle-project.org) and must be signed with an EdDSA key whose public half is `SUPublicEDKey` in `app/project.yml`. Keep the private key, base64 encoded, at `~/.blend-signing/sparkle-private-key` (Sparkle's `generate_keys -x` writes that format) with Sparkle's tools unpacked at `~/.blend-signing/sparkle-2.10.1`, or point `BLEND_SPARKLE_KEY` and `BLEND_SPARKLE_DIR` elsewhere. Losing this key means installed copies can't take updates any more, so keep a copy with the Developer ID key.
 
+The driver has its own version, `driver/VERSION`. Raise it only when the driver's code changes: `driver/`, or the libASPL tag it builds. Setup compares the installed driver with the one inside Blend by code directory hash, which covers the driver's Info.plist, so a new driver version makes every user enter their password and restart the Mac's audio when they update. Left alone, a release build of the same driver source on the same Mac, checkout path and Xcode is the same build, and the update doesn't touch the driver. A new Xcode can change the hash too; compare `codesign -dvvv` CDHash of `build/release/stage/Blend.app/Contents/PlugIns/BlendDriver.driver` with the last release's before publishing.
+
 With the key in place, a notarized build also adds the release to the update feed, `site/appcast.xml`, and to the Homebrew cask, `Casks/blend.rb`. To publish one, raise `VERSION` (semver: patch for fixes, minor for anything new), commit and push, then run:
 
 ```sh
