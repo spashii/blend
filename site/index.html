@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Blend: build your own microphone</title>
-<meta name="description" content="Blend mixes your mic, any app and system audio into one virtual microphone, with a volume slider for each. Free and open source, for macOS.">
-<meta property="og:title" content="Blend: build your own microphone">
-<meta property="og:description" content="Your mic, any app and system audio, mixed into one microphone you can pick in Discord, a call recorder or anything else.">
+<title>Blend: a volume mixer for your Mac's microphone</title>
+<meta name="description" content="A menu bar app that makes virtual microphones from your mic, any app's audio or all system audio, with a slider for each. Free and open source, for macOS.">
+<meta property="og:title" content="Blend: a volume mixer for your Mac's microphone">
+<meta property="og:description" content="Your mic, any app and system audio, each with a slider, mixed into a microphone you can pick in Discord, a call recorder or OBS.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <style>
   :root {
@@ -48,6 +48,11 @@
   .point h2 { font-size: 17px; letter-spacing: -.01em; }
   .point p { margin-top: 6px; color: var(--muted); font-size: 15px; }
 
+  .why, .rough { max-width: 640px; }
+  .why { padding-bottom: 56px; font-size: 19px; }
+  .rough { padding-bottom: 72px; color: var(--muted); font-size: 15px; }
+  .rough h2 { font-size: 17px; letter-spacing: -.01em; color: var(--fg); margin-bottom: 6px; }
+
   .bottom { text-align: center; padding: 0 0 96px; }
   .bottom p { color: var(--muted); }
   .bottom .actions { justify-content: center; }
@@ -59,6 +64,8 @@
     .hero { grid-template-columns: 1fr; gap: 40px; padding: 56px 0 48px; }
     h1 { font-size: 42px; }
     .points { grid-template-columns: 1fr; }
+    .why { font-size: 17px; padding-bottom: 40px; }
+    .rough { padding-bottom: 56px; }
   }
 </style>
 </head>
@@ -66,15 +73,14 @@
 <main>
   <section class="hero">
     <div>
-      <h1>Build your own microphone.</h1>
-      <p class="lede">Mix your mic and the sound of any app into one microphone, with a slider for each. Then pick it in Discord, a call recorder or anything else.</p>
+      <h1>A volume mixer for your Mac's microphone.</h1>
+      <p class="lede">Blend makes virtual microphones from your mic, any app or all system audio, with a slider for each. Pick one in Discord, a call recorder or OBS like any other microphone.</p>
       <div class="actions">
         <a class="button primary" href="https://apps.idea2prod.in/blend/download">Download for Mac</a>
         <a class="button" href="https://github.com/spashii/blend">View on GitHub</a>
       </div>
       <p class="meta">Free and open source · Apple silicon, macOS 15 or later</p>
     </div>
-
     <div class="panel" role="img" aria-label="Blend's menu bar panel: a mix called Blend Mic, used by Discord, with sliders for the microphone, Spotify and system audio">
       <header><span>Blend</span><span>+</span></header>
       <div class="mix">▾ Blend Mic <small><span class="dot"></span>Used by Discord</small></div>
@@ -97,19 +103,28 @@
     </div>
   </section>
 
+  <section class="why">
+    <p>I wanted something simple to hook into Discord and my call recorder: my mic plus the sound of an app, each at its own volume. The apps I tried had a lot of setup before anything worked, so I made one that sits in the menu bar. A new mix asks for a name, a microphone and whether to add system audio.</p>
+  </section>
+
   <section class="points">
     <div class="point">
-      <h2>Your voice plus any sound</h2>
-      <p>One app or everything the Mac plays, without a call hearing itself. Split by channel puts you left and the call right, for recorders.</p>
+      <h2>Mic, apps or all system audio</h2>
+      <p>Any input device, any app (each Firefox profile on its own) or everything the Mac plays. An app using the mix is left out of its system audio, so a call never hears itself.</p>
     </div>
     <div class="point">
-      <h2>A slider for each</h2>
-      <p>Volume, mute and a meter for every source, right in the menu bar.</p>
+      <h2>Split by channel</h2>
+      <p>Two sources on separate channels, such as your mic on the left and system audio on the right, so a recorder keeps the two sides of an online call apart. <a href="https://spashii.github.io/voice">Voice</a> uses this to transcribe each side.</p>
     </div>
     <div class="point">
-      <h2>Set up in a minute</h2>
-      <p>One setup page, then a mix is a name and a microphone. Echo cancellation built in.</p>
+      <h2>Up to 16 mixes</h2>
+      <p>Each mix is its own microphone, with a slider, mute and meter per source. Discord can use one while a recorder uses another.</p>
     </div>
+  </section>
+
+  <section class="rough">
+    <h2>Rough edges</h2>
+    <p>Apple silicon only. It installs an audio driver (one admin password), and mixes go silent while Blend is closed. A browser is captured whole, every tab. Call apps' noise suppression can chop up music, so turn it down there.</p>
   </section>
 
   <section class="bottom">
@@ -120,6 +135,6 @@
     <p class="brew">Or with Homebrew: <code>brew install --cask blend</code> after <code>brew tap spashii/blend https://github.com/spashii/blend</code></p>
   </section>
 </main>
-<footer class="site">Blend is MIT licensed. <a href="https://github.com/spashii/blend">Source on GitHub</a></footer>
+<footer class="site">Made by <a href="https://github.com/spashii">Sameer</a>. MIT licensed. <a href="https://github.com/spashii/blend">Source on GitHub</a></footer>
 </body>
 </html>
