@@ -26,7 +26,7 @@ A Mac with Apple silicon and macOS 15 or later.
 
 ## Install
 
-1. Download `Blend-VERSION.dmg` from [Releases](../../releases), open it, and drag Blend to Applications. Or install it with Homebrew:
+1. Download `Blend-VERSION.dmg` from [Releases](https://apps.idea2prod.in/blend/download), open it, and drag Blend to Applications. Or install it with Homebrew:
 
    ```sh
    brew tap spashii/blend https://github.com/spashii/blend
@@ -60,7 +60,7 @@ Good to know:
 
 ## Privacy
 
-Blend works entirely on your Mac. It has no analytics and no accounts, and the only thing it fetches from the internet is the list of releases when it checks for updates (with [Sparkle](https://sparkle-project.org), sending nothing about you or your Mac). Your mixes are stored in `~/Library/Application Support/Blend`. Audio passes through memory only, and the recording made to check a mix is discarded after it plays.
+Blend works entirely on your Mac. Update checks and downloads go through apps.idea2prod.in, which counts them by app, version and country and never stores your IP address. Your mixes are stored in `~/Library/Application Support/Blend`. Audio passes through memory only, and the recording made to check a mix is discarded after it plays.
 
 Blend uses the microphone and other apps' audio only while an app is using a mix that needs them, while you check a mix, and (to show which apps are making sound) while you are choosing a source.
 
