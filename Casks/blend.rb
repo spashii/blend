@@ -2,7 +2,7 @@ cask "blend" do
   version "0.3.2"
   sha256 "62cc143808a2d65359c49ad78b7a09a5d6af3f3207f19a2e4cca36e00922daec"
 
-  url "https://github.com/spashii/blend/releases/download/v#{version}/Blend-#{version}.dmg"
+  url "https://apps.idea2prod.in/blend/download/#{version}"
   name "Blend"
   desc "Mixes your microphone and app audio into virtual microphones"
   homepage "https://spashii.github.io/blend/"
