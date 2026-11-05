@@ -450,46 +450,35 @@ private struct AppRow: View {
     }
 }
 
-/// A name and a microphone; everything else is added in the mix itself, where each
-/// source has its volume.
+/// A name, a microphone and whether system audio goes in too; everything else is added in
+/// the mix itself, where each source has its volume.
 private struct NewMixSheet: View {
-    enum Preset: Hashable {
-        case microphone
-        /// Split by channel from the start, for recording; off again for a call.
-        case micAndSystem
-    }
-
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    @State private var preset = Preset.microphone
     @State private var name = ""
     @State private var micUID: String?
+    @State private var systemAudio = false
 
     var body: some View {
         Form {
             Section {
-                Picker("Preset", selection: $preset) {
-                    Text("Microphone").tag(Preset.microphone)
-                    Text("Mic and system audio").tag(Preset.micAndSystem)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
                 TextField("Name", text: $name, prompt: Text(suggestedName))
                 Picker("Microphone", selection: $micUID) {
                     Text("None").tag(String?.none)
                     ForEach(model.catalog.inputs) { Text($0.name).tag(Optional($0.uid)) }
                 }
-            } footer: {
-                Text(preset == .microphone
-                    ? "Other apps list it as \u{201C}\(effectiveName)\u{201D}. Add apps and other sources to it next."
-                    : "Other apps list it as \u{201C}\(effectiveName)\u{201D}, with your mic on the left and system audio on the right.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Toggle(isOn: $systemAudio) {
+                    Text("System audio")
+                    Text("Everything your Mac plays")
+                }
             }
         }
         .formStyle(.grouped)
         .frame(width: 420)
-        .onAppear { micUID = model.catalog.defaultInput?.uid }
+        .onAppear {
+            name = suggestedName
+            micUID = model.catalog.defaultInput?.uid
+        }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { dismiss() }
@@ -524,11 +513,13 @@ private struct NewMixSheet: View {
             [MixSource.device(uid: mic.uid, name: mic.name,
                 processing: Processing(echoCancel: true, isolation: .off))]
         } ?? []
-        if preset == .micAndSystem {
+        if systemAudio {
             sources.append(.system())
         }
+        // A mic and system audio start split by channel, for a recorder that keeps the two
+        // sides of a call apart; a call app needs it off, in the mix.
         if let mix = model.store.create(name: effectiveName, sources: sources,
-            split: preset == .micAndSystem) {
+            split: sources.count == 2) {
             model.selection = mix.id
         }
         dismiss()
