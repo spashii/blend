@@ -9,7 +9,7 @@ struct BlendApp: App {
             MenuPanel()
                 .environment(delegate.model)
         } label: {
-            Image(systemName: delegate.model.menuBarSymbol)
+            Image(delegate.model.menuBarImage, label: Text("Blend"))
         }
         .menuBarExtraStyle(.window)
 
@@ -124,11 +124,13 @@ final class AppModel {
         engine.statuses.values.contains { $0.running }
     }
 
-    var menuBarSymbol: String {
+    /// Two overlapping discs, like the app icon: filled while an app is using a mix, with a
+    /// badge while a source in use isn't working. Template images in Assets.xcassets.
+    var menuBarImage: String {
         if store.mixes.contains(where: { mix in issues(mix).contains { $0.urgent } }) {
-            return "waveform.badge.exclamationmark"
+            return "MenuBarAttention"
         }
-        return anyRunning ? "waveform.circle.fill" : "waveform.circle"
+        return anyRunning ? "MenuBarInUse" : "MenuBar"
     }
 
     func status(_ mix: Mix) -> MixStatus {
