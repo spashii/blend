@@ -2,7 +2,7 @@
 
 Build your own microphone on your Mac.
 
-Blend is a free, open source menu bar app for macOS that makes virtual microphones. In each one, called a mix, you choose what goes in (your microphones and the sound of other apps) and set a volume for each, like a volume mixer for your microphone. Any app that lets you pick a microphone can pick a mix: Discord, a call recorder, OBS, a website in your browser. Setup is one page, and a new mix asks only for a name and a microphone.
+Blend is a free, open source menu bar app for macOS that makes virtual microphones. In each one, called a mix, you choose what goes in (your microphones and the sound of other apps) and set a volume for each, like a volume mixer for your microphone. Any app that lets you pick a microphone can pick a mix: Discord, a call recorder, OBS, a website in your browser. Setup is one page, and a new mix asks only for a name, a microphone and whether to add system audio.
 
 - **Music in a voice chat.** Your microphone and a music player, with the music turned down, picked as the input in Discord.
 - **A recorder that hears the whole call.** Your microphone and system audio, split by channel so the recorder gets you on the left and the call on the right.
@@ -45,7 +45,7 @@ Blend updates itself: on its second launch it asks whether to check for updates 
 
 ## Using Blend
 
-1. **Make a mix** with the + button in the menu bar panel or the Blend window: give it a name and pick your microphone, or none.
+1. **Make a mix** with the + button in the menu bar panel or the Blend window: give it a name, pick your microphone or none, and turn on System audio to add everything your Mac plays.
 2. **Pick the mix as the microphone** in the app you want to use it with.
 3. **Add sources** in the Blend window. Apps are grouped into communication apps, browsers and other apps, with apps in a call listed first and a live meter on apps playing sound.
 4. **Set the volumes** in the menu bar panel by expanding a mix, and **check** it with the headphones button.
