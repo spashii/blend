@@ -7,6 +7,14 @@
     <language>en</language>
     <!-- tools/release.sh adds each release below this line. -->
     <item>
+      <title>Blend 0.3.2</title>
+      <pubDate>Thu, 05 Nov 2026 08:25:22 +0000</pubDate>
+      <sparkle:version>0.3.2</sparkle:version>
+      <sparkle:shortVersionString>0.3.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/spashii/blend/releases/download/v0.3.2/Blend-0.3.2.dmg" sparkle:edSignature="62w0N5f2eRA9/1N23BiBJws3Q3BothpI4FdsvKQqbxok/YDegLO4kNqn8hJ6G/xypdR5X33tFA4PstrHmmA9Dg==" length="4284946" type="application/octet-stream"/>
+    </item>
+    <item>
       <title>Blend 0.3.1</title>
       <pubDate>Thu, 05 Nov 2026 08:08:24 +0000</pubDate>
       <sparkle:version>0.3.1</sparkle:version>
