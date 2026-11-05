@@ -2,7 +2,7 @@
 
 A free menu bar app for macOS that mixes your mic, any app's audio or all system audio into virtual microphones, with a slider for each.
 
-I wanted something simple to hook into Discord and my call recorder: my mic plus the sound of an app, each at its own volume. The apps I tried had a lot of setup before anything worked, so I made one that sits in the menu bar. Setup is one page, and a new mix asks for a name, a microphone and whether to add system audio.
+I wanted something simple to hook into Discord and my call recorder: my mic plus the sound of an app, each at its own volume. BlackHole needed a lot of setup before anything worked, and Loopback costs $99, so I made one that sits in the menu bar. Setup is one page, and a new mix asks for a name, a microphone and whether to add system audio.
 
 Each mix shows up as a microphone, so any app that lets you pick one can use it (Discord, Zoom, a call recorder, OBS, a website). Some uses:
 
