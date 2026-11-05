@@ -1,13 +1,14 @@
 # Blend
 
-Build your own microphone on your Mac.
+A free menu bar app for macOS that mixes your mic, any app's audio or all system audio into virtual microphones, with a slider for each.
 
-Blend is a free, open source menu bar app for macOS that makes virtual microphones. In each one, called a mix, you choose what goes in (your microphones and the sound of other apps) and set a volume for each, like a volume mixer for your microphone. Any app that lets you pick a microphone can pick a mix: Discord, a call recorder, OBS, a website in your browser. Setup is one page, and a new mix asks only for a name, a microphone and whether to add system audio.
+I wanted something simple to hook into Discord and my call recorder: my mic plus the sound of an app, each at its own volume. The apps I tried had a lot of setup before anything worked, so I made one that sits in the menu bar. Setup is one page, and a new mix asks for a name, a microphone and whether to add system audio.
 
-- **Music in a voice chat.** Your microphone and a music player, with the music turned down, picked as the input in Discord.
-- **A recorder that hears the whole call.** Your microphone and system audio, split by channel so the recorder gets you on the left and the call on the right.
-- **A video or a demo in a call or a stream.** Your microphone and a browser or any other app, picked in a call app or OBS.
-- **One mix for each app.** Several mixes can be in use at once, so Discord can use one while a recorder uses another.
+Each mix shows up as a microphone, so any app that lets you pick one can use it (Discord, Zoom, a call recorder, OBS, a website). Some uses:
+
+- Music in a Discord voice chat, turned down under your voice.
+- A recorder that gets you on the left channel and the call on the right, so the two sides of an online call stay apart. [Voice](https://github.com/spashii/voice) uses this to transcribe each side.
+- A video or a demo played into a call or a stream.
 
 ## Features
 
@@ -50,12 +51,14 @@ Blend updates itself: on its second launch it asks whether to check for updates 
 3. **Add sources** in the Blend window. Apps are grouped into communication apps, browsers and other apps, with apps in a call listed first and a live meter on apps playing sound.
 4. **Set the volumes** in the menu bar panel by expanding a mix, and **check** it with the headphones button.
 
-Good to know:
+## Rough edges
 
+- Apple silicon and macOS 15 or later only.
+- Mixes are silent while Blend is closed, so leave Open at login on.
 - Call apps run their own noise suppression, which can treat music as noise. If music sounds choppy on the other end, turn that down in the call app: in Zoom, turn on "Original sound for musicians"; in Discord, turn off noise suppression.
 - A browser is captured whole: every tab in that copy. Browser profiles can be added separately only when each runs as its own copy, as Firefox profiles do. Profiles opened from Chrome's profile menu share one copy and can't be split.
+- Voice isolation adds about 60 ms of delay (90 ms on High quality) and can garble speech when other voices near you are as loud as yours. It starts off for every microphone you add.
 - With headphones you don't need echo cancellation and can turn it off for that microphone.
-- Voice isolation adds about 60 ms of delay (90 ms on High quality) and can garble speech when other voices near you are as loud as yours. It starts off for every microphone you add; turn it on for a microphone in its mix.
 - While a mix that captures an app is in use, macOS shows a purple dot in the menu bar. Echo cancellation shows it too, because it listens to what the Mac plays in order to remove it.
 
 ## Privacy
