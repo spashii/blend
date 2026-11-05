@@ -20,7 +20,11 @@ ExternalProject_Add(libASPL_ext
   BUILD_BYPRODUCTS "${LIBASPL_PREFIX}/lib/libASPL.a"
   UPDATE_DISCONNECTED TRUE)
 
-set(BLEND_DRIVER_VERSION "${PROJECT_VERSION}")
+# The driver keeps its own version, raised only when its code changes. Setup compares the
+# installed driver with the bundled one by code directory hash, which covers this Info.plist,
+# so following the app's version would ask every user to reinstall the driver on each release.
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" BLEND_DRIVER_VERSION LIMIT_COUNT 1)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION")
 
 # MODULE gives a loadable Mach-O bundle; the properties below wrap it in the
 # BlendDriver.driver directory that coreaudiod loads from /Library/Audio/Plug-Ins/HAL.
