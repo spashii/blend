@@ -45,7 +45,8 @@ targets:
         NSHumanReadableCopyright: Free software under the MIT License.
         NSMicrophoneUsageDescription: Blend mixes your microphone into the virtual microphones you create.
         NSAudioCaptureUsageDescription: Blend captures audio from the apps you add to a mix.
-        SUFeedURL: https://spashii.github.io/blend/appcast.xml
+        # A Worker that passes the Pages appcast through and counts update checks.
+        SUFeedURL: https://apps.idea2prod.in/blend/appcast.xml
         # Updates must be signed with the matching private key, kept with the Developer ID.
         SUPublicEDKey: YLvPSGEaYiPsXphy/q9LCDGs2s0qp8hM2LVBIWbl78c=
     entitlements:
