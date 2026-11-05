@@ -1,6 +1,6 @@
 cask "blend" do
-  version "0.3.0"
-  sha256 "1299fc970a98b1fa9c705892e78bf15e2881a6eff2ccfe7263fd3516b5ab77dd"
+  version "0.3.1"
+  sha256 "29feeb16ef00d521793fd44fbc4c3d2dbe8dfbf1f1471bdd45b5cdd6586c3b47"
 
   url "https://github.com/spashii/blend/releases/download/v#{version}/Blend-#{version}.dmg"
   name "Blend"
