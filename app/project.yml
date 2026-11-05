@@ -55,6 +55,10 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.blend.Blend
+        # Blend/AppIcon.icon is an Icon Composer icon. actool compiles it into Assets.car
+        # for macOS 26 and an AppIcon.icns for macOS 15; XcodeGen types it wrapper.icon,
+        # which Xcode still routes to actool.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_OBJC_BRIDGING_HEADER: Blend/Blend-Bridging-Header.h
         HEADER_SEARCH_PATHS: $(SRCROOT)/../engine/include
         LIBRARY_SEARCH_PATHS: $(BLEND_BUILD_DIR)/engine $(BLEND_BUILD_DIR)/webrtc/lib
