@@ -43,7 +43,7 @@ struct GeneralView: View {
                     }
                 }
                 Toggle("Check for updates automatically", isOn: $updates.automatic)
-                Text("Blend works on this Mac and collects nothing. It goes online only to check for updates.")
+                Text("Blend works on this Mac. It goes online only to check for updates.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 Button("Licenses") { openLicenses() }
