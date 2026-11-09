@@ -1,6 +1,6 @@
 cask "blend" do
-  version "0.6.1"
-  sha256 "f13493f8803bfee1fa93fea5088760bb39e76781f889ee1ab77e7caead0b9083"
+  version "0.6.2"
+  sha256 "2eb2189007251df15e824320a66996f5a99b620a3839f9f36465a420fe85470d"
 
   url "https://apps.idea2prod.in/blend/download/#{version}"
   name "Blend Mic"
