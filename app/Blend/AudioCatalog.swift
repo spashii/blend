@@ -2,12 +2,6 @@ import AppKit
 import CoreAudio
 import Observation
 
-struct InputDevice: Identifiable, Hashable, Sendable {
-    let uid: String
-    let name: String
-    var id: String { uid }
-}
-
 /// How the source picker groups apps, in the order it lists them.
 enum AppGroup: Int, CaseIterable, Identifiable {
     case communication
@@ -179,14 +173,7 @@ final class AudioCatalog {
     }
 
     private func refreshDevices() {
-        var found: [InputDevice] = []
-        for device in HAL.devices() where HAL.inputChannels(device) > 0 {
-            let uid = HAL.string(device, kAudioDevicePropertyDeviceUID)
-            if uid.hasPrefix("app.blend.") {
-                continue
-            }
-            found.append(InputDevice(uid: uid, name: HAL.string(device, kAudioObjectPropertyName)))
-        }
+        let found = InputDevices.inputs(HAL.devices().map(HAL.record))
         inputs = found
         let defaultUID = HAL.string(HAL.defaultInput(), kAudioDevicePropertyDeviceUID)
         defaultInput = found.first { $0.uid == defaultUID }
@@ -280,6 +267,36 @@ enum HAL {
             return ""
         }
         return value.takeRetainedValue() as String
+    }
+
+    static func record(_ device: AudioObjectID) -> DeviceRecord {
+        DeviceRecord(uid: string(device, kAudioDevicePropertyDeviceUID),
+            name: string(device, kAudioObjectPropertyName),
+            transport: uint32(device, kAudioDevicePropertyTransportType),
+            inputChannels: inputChannels(device), isPrivate: isPrivateAggregate(device))
+    }
+
+    static func uint32(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector) -> UInt32 {
+        var address = address(selector)
+        var value: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        guard AudioObjectGetPropertyData(object, &address, 0, nil, &size, &value) == noErr else {
+            return 0
+        }
+        return value
+    }
+
+    /// Only aggregates have a composition; any other device reads as not private.
+    static func isPrivateAggregate(_ device: AudioObjectID) -> Bool {
+        var address = address(kAudioAggregateDevicePropertyComposition)
+        var value: Unmanaged<CFDictionary>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFDictionary>?>.size)
+        guard AudioObjectHasProperty(device, &address),
+              AudioObjectGetPropertyData(device, &address, 0, nil, &size, &value) == noErr,
+              let composition = value?.takeRetainedValue() as? [String: Any] else {
+            return false
+        }
+        return (composition[kAudioAggregateDeviceIsPrivateKey] as? NSNumber)?.boolValue ?? false
     }
 
     static func inputChannels(_ device: AudioObjectID) -> Int {
