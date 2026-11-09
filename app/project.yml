@@ -120,6 +120,7 @@ targets:
       - path: Blend/WhenIdle.swift
       - path: Blend/SupportItems.swift
       - path: Blend/StatusPolling.swift
+      - path: Blend/InputDevices.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.blend.BlendTests
