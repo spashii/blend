@@ -52,7 +52,7 @@ struct GeneralView: View {
 
             Section {
                 Button("Uninstall Blend Mic…", role: .destructive) { confirmingUninstall = true }
-                    .disabled(setup.working)
+                    .disabled(setup.driverWork != nil || model.uninstalling)
             } footer: {
                 Text("Removes the driver, your mixes and Blend Mic's settings, then moves Blend Mic to the Trash.")
             }
@@ -135,9 +135,10 @@ private struct DriverRow: View {
 
     var body: some View {
         let setup = model.setup
-        if setup.working {
-            StepRow(title: "Audio driver", done: false,
-                detail: "Installing. Sound pauses for a moment.") {
+        // Once the driver is gone Blend clears its settings and moves itself to the Trash,
+        // so the row keeps saying so rather than offering to install again.
+        if let work = model.uninstalling ? DriverWork.uninstall : setup.driverWork {
+            StepRow(title: "Audio driver", done: false, detail: work.progress) {
                 ProgressView().controlSize(.small)
             }
         } else {

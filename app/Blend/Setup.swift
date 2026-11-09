@@ -240,6 +240,20 @@ enum Permissions {
     }
 }
 
+enum DriverWork: Equatable {
+    case install
+    case update
+    case uninstall
+
+    var progress: String {
+        switch self {
+        case .install: "Installing. Sound pauses for a moment."
+        case .update: "Updating. Sound pauses for a moment."
+        case .uninstall: "Uninstalling. Sound pauses for a moment."
+        }
+    }
+}
+
 /// What Blend needs before mixes work, as one observable state for the setup page and the
 /// warnings elsewhere.
 @MainActor
@@ -251,7 +265,8 @@ final class Setup {
     private(set) var microphone: Access = Permissions.microphone()
     private(set) var appAudio: Access = Permissions.appAudio()
     private(set) var openAtLogin: SMAppService.Status = SMAppService.mainApp.status
-    private(set) var working = false
+    /// What the driver row says while a password prompt or an audio restart is under way.
+    private(set) var driverWork: DriverWork?
     private(set) var lastError: String?
 
     @ObservationIgnored private var observer: NSObjectProtocol?
@@ -286,16 +301,21 @@ final class Setup {
     }
 
     /// Stays working until the audio service has loaded the new driver, so the page goes
-    /// straight from installing to done.
+    /// straight from installing to done. An update is the same install over a different
+    /// build, named as one so the row matches the button that started it.
     func installDriver() async {
-        await perform {
+        var work = DriverWork.install
+        if case .different = driver {
+            work = .update
+        }
+        await perform(work) {
             try await Driver.install()
             await Driver.waitUntilLoaded()
         }
     }
 
     func uninstallDriver() async -> Bool {
-        await perform { try await Driver.uninstall() }
+        await perform(.uninstall) { try await Driver.uninstall() }
     }
 
     func allowMicrophone() async {
@@ -323,10 +343,10 @@ final class Setup {
     }
 
     @discardableResult
-    private func perform(_ action: () async throws -> Void) async -> Bool {
-        working = true
+    private func perform(_ work: DriverWork, _ action: () async throws -> Void) async -> Bool {
+        driverWork = work
         defer {
-            working = false
+            driverWork = nil
             refresh()
         }
         do {
