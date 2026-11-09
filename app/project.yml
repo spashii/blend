@@ -101,3 +101,21 @@ targets:
       - sdk: AudioToolbox.framework
       - sdk: AppKit.framework
       - sdk: ServiceManagement.framework
+  # Swift tests of the app's pure logic. They compile the sources they test rather than
+  # load Blend.app, so a test run never starts a second Blend beside the one in use.
+  BlendTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: BlendTests
+      - path: Blend/MixStatus.swift
+      - path: Blend/WhenIdle.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.blend.BlendTests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: ""
+    scheme:
+      testTargets: [BlendTests]

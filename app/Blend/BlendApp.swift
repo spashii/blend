@@ -72,7 +72,7 @@ final class AppModel {
     let catalog = AudioCatalog()
     let player = RecentPlayer()
     let setup = Setup()
-    let updates = Updates()
+    let updates: Updates
     let check: MixCheck
     var selection: String?
     var showingNewMix = false
@@ -81,6 +81,9 @@ final class AppModel {
 
     init() {
         check = MixCheck(engine: engine, player: player)
+        updates = Updates(idle: { [engine, check] in
+            MixStatus.idle(engine.statuses.values, checking: check.phase != .idle)
+        })
         store.onChange = { [weak self] mixes in
             self?.engine.apply(mixes)
             self?.shared.write(mixes)

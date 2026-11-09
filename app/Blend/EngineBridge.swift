@@ -1,31 +1,6 @@
 import Foundation
 import Observation
 
-struct MixStatus: Equatable, Sendable {
-    var deviceReady = false
-    var running = false
-    /// Names of the apps reading the mix.
-    var users: [String] = []
-    var peak: Float = 0
-    /// Per source, in the mix's source order.
-    var sourcePeaks: [Float] = []
-    var sourceLive: [Bool] = []
-    /// Captured, but nothing but digital silence for a while: a muted or refused device.
-    var sourceSilent: [Bool] = []
-
-    func live(_ index: Int) -> Bool {
-        sourceLive.indices.contains(index) && sourceLive[index]
-    }
-
-    func silent(_ index: Int) -> Bool {
-        sourceSilent.indices.contains(index) && sourceSilent[index]
-    }
-
-    func level(_ index: Int) -> Float {
-        sourcePeaks.indices.contains(index) ? sourcePeaks[index] : 0
-    }
-}
-
 /// Owns the C++ engine. Every preset change sends the whole configuration; status is polled
 /// for meters and the "in use" state. None of these calls wait on the engine's work.
 @MainActor

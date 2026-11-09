@@ -26,11 +26,13 @@ To install the driver without a password prompt on every change, run `sudo tools
 
 ```sh
 ctest --test-dir build --output-on-failure
+xcodebuild test -project app/Blend.xcodeproj -scheme BlendTests -destination "platform=macOS,arch=arm64"
 ```
 
 - `engine/tests/DspTests.cpp`: the ring buffer, resampler quality, drift control, and recovery from backlog and stalls.
 - `engine/tests/IdentityTests.cpp`: the rule that tells app copies apart, against recorded inventories in `spikes/identity/data/`.
 - `engine/tests/ProcessingTests.mm`: echo cancellation and voice isolation on synthetic signals, through the calls the capture thread makes.
+- `app/BlendTests`: when Blend counts as idle, so an update can install without cutting anyone's sound, and the wait for it. They build without the engine and never open Blend.
 
 The pure C++ parts (the ring, the resampler, the source reader and the identity rule) also build and run on Linux.
 
