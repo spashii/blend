@@ -57,9 +57,13 @@ struct MenuPanel: View {
             }
 
             Divider()
-            HStack {
+            // One column, so the support items sit under Settings… and above Quit, as in a menu.
+            VStack(alignment: .leading, spacing: 6) {
                 Button("Settings…") { openSettings() }
-                Spacer()
+                ForEach(SupportItem.allCases, id: \.self) { item in
+                    Button(item.title) { open(item) }
+                        .disabled(item == .checkForUpdates && !model.updates.canCheck)
+                }
                 Button("Quit Blend Mic") { NSApplication.shared.terminate(nil) }
             }
             .buttonStyle(.borderless)
@@ -79,6 +83,14 @@ struct MenuPanel: View {
     private func openSettings() {
         openWindow(id: "settings")
         NSApplication.shared.activate()
+    }
+
+    private func open(_ item: SupportItem) {
+        switch item {
+        case .checkForUpdates: model.updates.check()
+        case .reportIssue: NSWorkspace.shared.open(SupportItem.issueURL)
+        case .viewOnGitHub: NSWorkspace.shared.open(SupportItem.repository)
+        }
     }
 }
 

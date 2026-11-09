@@ -32,7 +32,7 @@ xcodebuild test -project app/Blend.xcodeproj -scheme BlendTests -destination "pl
 - `engine/tests/DspTests.cpp`: the ring buffer, resampler quality, drift control, and recovery from backlog and stalls.
 - `engine/tests/IdentityTests.cpp`: the rule that tells app copies apart, against recorded inventories in `spikes/identity/data/`.
 - `engine/tests/ProcessingTests.mm`: echo cancellation and voice isolation on synthetic signals, through the calls the capture thread makes.
-- `app/BlendTests`: when Blend counts as idle, so an update can install without cutting anyone's sound, and the wait for it. They build without the engine and never open Blend.
+- `app/BlendTests`: when Blend counts as idle, so an update can install without cutting anyone's sound, and the wait for it; and the panel's Check for Updates, Report an Issue and View on GitHub items, with the issue link, which carries only the app and macOS versions. They build without the engine and never open Blend.
 
 The pure C++ parts (the ring, the resampler, the source reader and the identity rule) also build and run on Linux.
 
