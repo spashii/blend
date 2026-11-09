@@ -8,8 +8,8 @@ private final class FakeEngine {
     var quiets = 0
 }
 
-/// Counts reads across opening and closing Blend's views and a mix coming into and out of
-/// use, with real timers on the main run loop, as the app runs them.
+/// Counts reads across opening a view, a check, and a mix coming into and out of use, with
+/// real timers on the main run loop, as the app runs them.
 @MainActor
 final class StatusPollingTests: XCTestCase {
     private func makePolling(_ engine: FakeEngine) -> StatusPolling {
@@ -35,20 +35,31 @@ final class StatusPollingTests: XCTestCase {
         XCTAssertFalse(polling.running)
     }
 
-    func testOpeningReadsAtOnceThenEvery100msUntilClosed() {
+    /// Opening a view reads once for its first frame. With no mix read or checked every level
+    /// is zero, so nothing keeps reading while it stays open.
+    func testOpeningReadsOnceAndStartsNoTimer() {
         let engine = FakeEngine()
         let polling = makePolling(engine)
-        polling.setViewsOpen(true)
-        // Before any timer fires, so the first frame is current.
+        polling.viewOpened()
         XCTAssertEqual(engine.reads, 1)
-        XCTAssertTrue(polling.running)
-        let open = reads(engine, during: 0.55)
-        XCTAssertGreaterThanOrEqual(open, 3)
-        XCTAssertLessThanOrEqual(open, 7)
-
-        polling.setViewsOpen(false)
         XCTAssertFalse(polling.running)
-        XCTAssertEqual(engine.quiets, 1)
+        XCTAssertEqual(reads(engine, during: 0.5), 0)
+    }
+
+    /// Open the panel, check a mix, close the panel (which stops the check).
+    func testACheckReadsEvery100msUntilItStops() {
+        let engine = FakeEngine()
+        let polling = makePolling(engine)
+        polling.viewOpened()
+        polling.setChecking(true)
+        XCTAssertEqual(engine.reads, 2)
+        XCTAssertTrue(polling.running)
+        let checking = reads(engine, during: 0.55)
+        XCTAssertGreaterThanOrEqual(checking, 3)
+        XCTAssertLessThanOrEqual(checking, 7)
+
+        polling.setChecking(false)
+        XCTAssertFalse(polling.running)
         XCTAssertEqual(reads(engine, during: 0.5), 0)
     }
 
@@ -69,13 +80,13 @@ final class StatusPollingTests: XCTestCase {
         XCTAssertEqual(reads(engine, during: 0.5), 0)
     }
 
-    func testClosingTheViewsKeepsReadingUntilTheMixIsFree() {
+    func testEndingACheckKeepsReadingWhileAMixIsInUse() {
         let engine = FakeEngine()
         let polling = makePolling(engine)
-        polling.setViewsOpen(true)
+        polling.setChecking(true)
         engine.inUse = true
         polling.changed()
-        polling.setViewsOpen(false)
+        polling.setChecking(false)
         XCTAssertTrue(polling.running)
         XCTAssertGreaterThanOrEqual(reads(engine, during: 0.55), 3)
         XCTAssertEqual(engine.quiets, 0)
@@ -83,6 +94,7 @@ final class StatusPollingTests: XCTestCase {
         engine.inUse = false
         polling.changed()
         XCTAssertFalse(polling.running)
+        XCTAssertEqual(engine.quiets, 1)
         XCTAssertEqual(reads(engine, during: 0.5), 0)
     }
 
