@@ -496,14 +496,11 @@ private struct NewMixSheet: View {
         return trimmed.isEmpty ? suggestedName : trimmed
     }
 
-    /// "Blend Mic", then "Blend Mic 2", so two mixes never share a name in other apps.
+    /// "Mix 1", then the lowest free number, so two mixes never share a name in other apps
+    /// and none shares the app's name.
     private var suggestedName: String {
-        let base = "Blend Mic"
         let taken = Set(model.store.mixes.map(\.name))
-        if !taken.contains(base) {
-            return base
-        }
-        return (2...).lazy.map { "\(base) \($0)" }.first { !taken.contains($0) }!
+        return (1...).lazy.map { "Mix \($0)" }.first { !taken.contains($0) }!
     }
 
     private func create() {
