@@ -15,7 +15,7 @@ I wanted something simple to hook into Discord and my call recorder. BlackHole n
 
 ## Install
 
-Download the DMG from [apps.idea2prod.in/blend/download](https://apps.idea2prod.in/blend/download), open it, and drag the app to Applications. Or use Homebrew:
+Download the DMG from the [latest release](https://github.com/spashii/blend/releases/latest), open it, and drag the app to Applications. Or use Homebrew:
 
 ```sh
 brew tap spashii/blend https://github.com/spashii/blend
@@ -23,7 +23,7 @@ brew trust spashii/blend
 brew install --cask blend
 ```
 
-Blend Mic opens to its Setup page. It installs the audio driver that makes mixes appear as microphones (one administrator password), asks for the microphone and for audio from other apps, and offers to open at login. Mixes are silent while Blend Mic is closed, so leave that on.
+Blend Mic opens to its Setup page. It installs the audio driver that makes mixes appear as microphones (one administrator password), asks for the microphone and for audio from other apps, and offers to open at login. Mixes are silent while Blend Mic is closed, so leave that on. After that it updates itself, installing new versions while no app is using a mix.
 
 ## Requirements
 
@@ -37,7 +37,7 @@ Report them at [github.com/spashii/blend/issues](https://github.com/spashii/blen
 
 ## Privacy
 
-Your audio never leaves your Mac, and there are no accounts. Update checks and downloads go through apps.idea2prod.in, which counts them by app, version and country and never stores your IP address.
+Your audio never leaves your Mac, and there are no accounts. Blend Mic checks for updates once a day, and the update server counts those checks by app, version and country and never stores your IP address.
 
 ## Documentation
 
