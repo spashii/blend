@@ -44,6 +44,7 @@ Your audio never leaves your Mac, and there are no accounts. Update checks and d
 - [Check a mix](./docs/user/check-a-mix.md)
 - [Troubleshooting](./docs/user/troubleshooting.md)
 - [Tested with](./docs/user/tested-with.md)
+- [Updates](./docs/user/updates.md)
 - [Uninstall](./docs/user/uninstall.md)
 
 Building from source? Start at [docs/operations/development.md](./docs/operations/development.md). How it works is in [docs/internals/overview.md](./docs/internals/overview.md).

@@ -8,6 +8,7 @@
 - [Check a mix](./user/check-a-mix.md)
 - [Troubleshooting](./user/troubleshooting.md)
 - [Tested with](./user/tested-with.md)
+- [Updates](./user/updates.md)
 - [Uninstall](./user/uninstall.md)
 
 ---
