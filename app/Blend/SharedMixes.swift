@@ -2,7 +2,7 @@ import Foundation
 
 /// Every mix described for other apps, such as a recorder that keeps the two sides of a
 /// split mix apart, at ~/Library/Application Support/Blend/devices.json. The format is in
-/// docs/MIXES-FOR-APPS.md. Written only when it changes, which a volume change never does.
+/// docs/internals/mixes-for-apps.md. Written only when it changes, which a volume change never does.
 @MainActor
 final class SharedMixes {
     private struct File: Encodable {
