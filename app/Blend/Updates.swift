@@ -3,13 +3,14 @@ import Observation
 import Sparkle
 
 /// Updates come through Sparkle: it reads the appcast through apps.idea2prod.in, checks each
-/// update against the signing key in Info.plist, and asks before installing. On the second
-/// launch it asks whether to check automatically; nothing else in Blend goes online.
+/// update against the signing key in Info.plist, and asks before installing unless automatic
+/// updates are on. On the second launch it asks whether to check automatically; nothing else
+/// in Blend goes online.
 @MainActor
 @Observable
 final class Updates {
     /// Sparkle keeps its delegate weakly, so it lives here.
-    @ObservationIgnored private let feed: OwnerMarker
+    @ObservationIgnored private let delegate: UpdaterDelegate
     @ObservationIgnored private let controller: SPUStandardUpdaterController
     @ObservationIgnored private var observations: [NSKeyValueObservation] = []
 
@@ -19,10 +20,12 @@ final class Updates {
         didSet { controller.updater.automaticallyChecksForUpdates = automatic }
     }
 
-    init() {
-        feed = OwnerMarker()
+    /// `idle` says whether Blend can quit for an update right now, reading only observable
+    /// state, so a change to its answer can be observed.
+    init(idle: @escaping @MainActor () -> Bool) {
+        delegate = UpdaterDelegate(idle: idle)
         controller = SPUStandardUpdaterController(
-            startingUpdater: true, updaterDelegate: feed, userDriverDelegate: nil)
+            startingUpdater: true, updaterDelegate: delegate, userDriverDelegate: nil)
         automatic = controller.updater.automaticallyChecksForUpdates
         canCheck = controller.updater.canCheckForUpdates
         // Sparkle changes both on the main thread.
@@ -47,11 +50,30 @@ final class Updates {
     }
 }
 
-/// Marks update checks from the owner's own Macs (`defaults write app.blend.Blend OwnerMac
-/// -bool YES`) with `self=1` on the appcast URL, so the counts on apps.idea2prod.in can leave
-/// them out. Everyone else's checks carry no parameters; system profiling stays off.
-final class OwnerMarker: NSObject, SPUUpdaterDelegate {
-    func feedParameters(for updater: SPUUpdater, sendingSystemProfile: Bool) -> [[String: String]] {
+/// Sparkle's delegate. Sparkle calls it on the main thread, where Blend's state lives.
+@MainActor
+final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
+    private let whenIdle: WhenIdle
+
+    init(idle: @escaping @MainActor () -> Bool) {
+        whenIdle = WhenIdle(idle)
+    }
+
+    /// Marks update checks from the owner's own Macs (`defaults write app.blend.Blend OwnerMac
+    /// -bool YES`) with `self=1` on the appcast URL, so the counts on apps.idea2prod.in can leave
+    /// them out. Everyone else's checks carry no parameters; system profiling stays off.
+    nonisolated func feedParameters(for updater: SPUUpdater, sendingSystemProfile: Bool) -> [[String: String]] {
         UserDefaults.standard.bool(forKey: "OwnerMac") ? [["key": "self", "value": "1"]] : []
+    }
+
+    /// With automatic updates on, Sparkle downloads an update and installs it when Blend
+    /// quits, but Blend runs until logout, so an update could wait for days. Blend takes the
+    /// install over and runs it once no app is using a mix: Sparkle then quits Blend, installs
+    /// the update and opens it again, and no one loses sound in the middle of a call. If that
+    /// quit is cancelled, the handler works again at the next return to idle.
+    func updater(_ updater: SPUUpdater, willInstallUpdateOnQuit item: SUAppcastItem,
+                 immediateInstallationBlock immediateInstallHandler: @escaping () -> Void) -> Bool {
+        whenIdle.run(immediateInstallHandler)
+        return true
     }
 }

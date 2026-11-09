@@ -70,6 +70,8 @@ cmake --build $cmakeDir
 ctest --test-dir $cmakeDir --output-on-failure
 
 (cd app && xcodegen generate --quiet)
+xcodebuild test -project app/Blend.xcodeproj -scheme BlendTests \
+  -destination "platform=macOS,arch=arm64" -derivedDataPath $out/tests -quiet
 xcodebuild -project app/Blend.xcodeproj -scheme Blend -configuration Release \
   -destination "platform=macOS,arch=arm64" -derivedDataPath $out/xcode -quiet \
   BLEND_BUILD_DIR=$cmakeDir MARKETING_VERSION=$version CURRENT_PROJECT_VERSION=$version \
