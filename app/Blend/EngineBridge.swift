@@ -2,8 +2,9 @@ import Foundation
 import Observation
 
 /// Owns the C++ engine. Every preset change sends the whole configuration. Status is read
-/// every 100 ms while a Blend view is open or an app reads a mix, and otherwise only when
-/// the engine reports a change (StatusPolling). None of these calls wait on the engine's work.
+/// every 100 ms while an app reads a mix or a mix is checked, and otherwise only when a view
+/// opens or the engine reports a change (StatusPolling). None of these calls wait on the
+/// engine's work.
 @MainActor
 @Observable
 final class EngineBridge {
@@ -32,9 +33,9 @@ final class EngineBridge {
         BlendEngineDestroy(engine)
     }
 
-    /// Whether the panel or the settings window is open, so meters are on screen.
-    func setViewsOpen(_ open: Bool) {
-        polling?.setViewsOpen(open)
+    /// The panel or the settings window opened.
+    func viewOpened() {
+        polling?.viewOpened()
     }
 
     func apply(_ mixes: [Mix]) {
@@ -52,10 +53,12 @@ final class EngineBridge {
     /// Runs one mix for a check; live also plays it to the current output.
     func startCheck(_ mixID: String, live: Bool) {
         BlendEngineStartCheck(engine, mixID, live)
+        polling?.setChecking(true)
     }
 
     func stopCheck() {
         BlendEngineStopCheck(engine)
+        polling?.setChecking(false)
     }
 
     /// What a mix carried since its check started, as interleaved stereo at 48 kHz.

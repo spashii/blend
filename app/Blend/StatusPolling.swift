@@ -1,10 +1,10 @@
 import Foundation
 
-/// When Blend reads the engine's status. A Blend view's meters need fresh levels, and while
-/// an app reads a mix so do the menu bar icon and the warning for a silent microphone, so
-/// then it reads every 100 ms. Otherwise nothing Blend shows can change without the engine
-/// saying so (BlendEngineSetObserver), so it stops and reads only on `changed()`: an unused
-/// Blend has no timer waking the Mac.
+/// When Blend reads the engine's status. Levels move only while an app reads a mix or a mix
+/// is being checked, and the warning for a silent microphone needs them, so then it reads
+/// every 100 ms. Otherwise every level is zero and everything else Blend shows changes only
+/// when the engine says so (BlendEngineSetObserver), so it reads only then and when a view
+/// opens: an unused Blend has no timer waking the Mac, even with its windows open.
 @MainActor
 final class StatusPolling {
     private let interval: TimeInterval
@@ -14,7 +14,7 @@ final class StatusPolling {
     /// levels left over from the last read.
     private let quiet: () -> Void
     private var timer: Timer?
-    private var viewsOpen = false
+    private var checking = false
 
     init(interval: TimeInterval = 0.1, read: @escaping () -> Bool, quiet: @escaping () -> Void) {
         self.interval = interval
@@ -26,9 +26,14 @@ final class StatusPolling {
         timer != nil
     }
 
-    /// Opening reads at once, so the first frame shows current levels.
-    func setViewsOpen(_ open: Bool) {
-        viewsOpen = open
+    /// Reads at once, so the view's first frame is current.
+    func viewOpened() {
+        update()
+    }
+
+    /// A check runs a mix that no app reads, so its levels move.
+    func setChecking(_ on: Bool) {
+        checking = on
         update()
     }
 
@@ -39,7 +44,7 @@ final class StatusPolling {
 
     private func update() {
         let inUse = read()
-        guard viewsOpen || inUse else {
+        guard inUse || checking else {
             timer?.invalidate()
             timer = nil
             quiet()

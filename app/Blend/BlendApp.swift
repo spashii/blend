@@ -100,7 +100,7 @@ final class AppModel {
     /// the microphone is never left running behind a closed panel.
     func viewAppeared() {
         visibleViews += 1
-        engine.setViewsOpen(true)
+        engine.viewOpened()
         setup.refresh()
     }
 
@@ -108,7 +108,6 @@ final class AppModel {
         visibleViews = max(0, visibleViews - 1)
         if visibleViews == 0 {
             check.stop()
-            engine.setViewsOpen(false)
         }
     }
 
