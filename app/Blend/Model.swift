@@ -54,10 +54,6 @@ struct MixSource: Codable, Hashable, Identifiable, Sendable {
         MixSource(kind: .device, uid: uid, name: name, processing: processing)
     }
 
-    static func app(_ app: RunningApp) -> MixSource {
-        MixSource(kind: .app, bundleID: app.bundleID, instance: app.instance, name: app.name)
-    }
-
     static func system() -> MixSource {
         MixSource(kind: .system, name: "System audio")
     }

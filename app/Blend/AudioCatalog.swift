@@ -46,6 +46,12 @@ struct RunningApp: Identifiable, Hashable {
     }
 }
 
+extension MixSource {
+    static func app(_ app: RunningApp) -> MixSource {
+        MixSource(kind: .app, bundleID: app.bundleID, instance: app.instance, name: app.name)
+    }
+}
+
 /// What can be added to a mix: input devices other than Blend's own, and running apps.
 @MainActor
 @Observable
