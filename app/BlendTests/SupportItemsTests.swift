@@ -28,3 +28,27 @@ final class SupportItemsTests: XCTestCase {
         XCTAssertEqual(items.first?.value, "App version: 1.0+dev&title=x\nmacOS: Version 26.0\n\n")
     }
 }
+
+/// The footer items draw as menu items: menu text colour, the selection highlight under the
+/// pointer, and a disabled item (Check for Updates… while Sparkle can't check) never highlighted.
+final class MenuItemLookTests: XCTestCase {
+    func testEnabledItemUsesMenuTextColour() {
+        let look = MenuItemLook(enabled: true, highlighted: false)
+        XCTAssertEqual(look.text, .labelColor)
+        XCTAssertNil(look.background)
+    }
+
+    func testHighlightedItemUsesSelectionColours() {
+        let look = MenuItemLook(enabled: true, highlighted: true)
+        XCTAssertEqual(look.text, .selectedMenuItemTextColor)
+        XCTAssertEqual(look.background, .selectedContentBackgroundColor)
+    }
+
+    func testDisabledItemStaysDisabledUnderThePointer() {
+        for highlighted in [false, true] {
+            let look = MenuItemLook(enabled: false, highlighted: highlighted)
+            XCTAssertEqual(look.text, .disabledControlTextColor)
+            XCTAssertNil(look.background)
+        }
+    }
+}

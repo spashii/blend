@@ -58,7 +58,7 @@ struct MenuPanel: View {
 
             Divider()
             // One column, so the support items sit under Settings… and above Quit, as in a menu.
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 0) {
                 Button("Settings…") { openSettings() }
                 ForEach(SupportItem.allCases, id: \.self) { item in
                     Button(item.title) { open(item) }
@@ -66,7 +66,10 @@ struct MenuPanel: View {
                 }
                 Button("Quit Blend Mic") { NSApplication.shared.terminate(nil) }
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(MenuItemButtonStyle())
+            // The highlights reach past the text, which stays in line with the rest of the panel.
+            .padding(.horizontal, -MenuItemLook.inset.width)
+            .padding(.vertical, -MenuItemLook.inset.height)
         }
         .padding(14)
         .frame(width: 320)
