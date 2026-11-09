@@ -226,7 +226,10 @@ final class AppModel {
         }
         uninstalling = true
         store.deleteAll()
-        if setup.openAtLogin == .enabled {
+        // A login item switched off in System Settings reads as requiresApproval but is still
+        // registered. macOS keeps a disabled record of an unregistered item in its background
+        // items list, which no public call removes; it is not listed under Open at Login.
+        if setup.openAtLogin != .notRegistered {
             setup.setOpenAtLogin(false)
         }
         if let domain = Bundle.main.bundleIdentifier {
@@ -236,6 +239,9 @@ final class AppModel {
             reset.arguments = ["reset", "All", domain]
             try? reset.run()
             reset.waitUntilExit()
+            // Quitting writes preferences and window state again, so the files go once Blend
+            // has exited.
+            Leftovers.removeAfterQuit(domain: domain)
         }
         NSWorkspace.shared.recycle([Bundle.main.bundleURL]) { _, _ in
             Task { @MainActor in NSApplication.shared.terminate(nil) }
