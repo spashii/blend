@@ -7,6 +7,14 @@
     <language>en</language>
     <!-- tools/release.sh adds each release below this line. -->
     <item>
+      <title>Blend Mic 0.5.0</title>
+      <pubDate>Mon, 09 Nov 2026 15:13:17 +0000</pubDate>
+      <sparkle:version>0.5.0</sparkle:version>
+      <sparkle:shortVersionString>0.5.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/spashii/blend/releases/download/v0.5.0/Blend-0.5.0.dmg" sparkle:edSignature="/XUnKErqX22/yKs6x8QgMX9KjvAIPRZaOCT4avy4LFMV3qMhrcblOpqtdrjDmNy7BjkoS643oLKAPGwCRpH8Cw==" length="4263708" type="application/octet-stream"/>
+    </item>
+    <item>
       <title>Blend 0.4.0</title>
       <pubDate>Mon, 09 Nov 2026 13:27:58 +0000</pubDate>
       <sparkle:version>0.4.0</sparkle:version>
