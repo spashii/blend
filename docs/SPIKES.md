@@ -20,7 +20,8 @@ Run: `lab procs`, `lab tap` with real playback.
 - Capture is isolated per app (tapping Slack while Firefox played gave pure silence) and level-exact (a -12.2 dBFS tone read -12.2 dBFS).
 - A tap follows apps that start playing later: QuickTime and Brave were picked up within a second by updating the live tap's process list, with no restart and no gap in IO.
 - The System Audio Recording permission was granted without a visible step; the first tap started in 0.1 s.
-- Not run: Safari itself, Zoom, Discord, Teams.
+- Discord and Google Meet: passed in real use, on the owner's own calls on the MacBook Air with a Blend Mic mix as the microphone (reported by him, 9 Nov 2026).
+- Not run: Safari itself, Zoom, Teams.
 
 ## S4 Echo cancellation, far end only: passed
 
