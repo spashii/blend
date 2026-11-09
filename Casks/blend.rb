@@ -1,6 +1,6 @@
 cask "blend" do
-  version "0.3.2"
-  sha256 "62cc143808a2d65359c49ad78b7a09a5d6af3f3207f19a2e4cca36e00922daec"
+  version "0.4.0"
+  sha256 "5ba46cb40cd70504e53e5f1bebbccbad791467b0c4139d42254c66542d472159"
 
   url "https://apps.idea2prod.in/blend/download/#{version}"
   name "Blend"
