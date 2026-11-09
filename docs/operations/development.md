@@ -44,7 +44,7 @@ The pure C++ parts (the ring, the resampler, the source reader and the identity 
 - `loop`, `stress ITERATIONS [PAUSE_MS]`, `remove-live`: driver lifecycle tests.
 - `engine CONFIG SECONDS [OUT.wav]`: run the engine with a configuration file and record the mix.
 
-The other folders in `spikes/` hold the measurement scripts behind [SPIKES.md](SPIKES.md).
+The other folders in `spikes/` hold the measurement scripts behind [the measurements](../internals/measurements.md).
 
 ## Debugging
 

@@ -42,7 +42,7 @@ A Mac with Apple silicon and macOS 15 or later.
    - **Allow audio from other apps.**
    - **Open at login.** Mixes are silent while Blend is closed, so this is worth turning on.
 
-Blend updates itself: on its second launch it asks whether to check for updates automatically, and General has a Check for Updates button. Updates are signed, and Blend installs only ones signed with its own key. To build Blend from source, see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+Blend updates itself: on its second launch it asks whether to check for updates automatically, and General has a Check for Updates button. Updates are signed, and Blend installs only ones signed with its own key. To build Blend from source, see [docs/operations/development.md](docs/operations/development.md).
 
 ## Using Blend
 
@@ -83,7 +83,7 @@ Then move Blend to the Trash.
 
 ## How it works
 
-Blend installs an audio server plug-in that adds one microphone per mix, plus one hidden device that Blend writes the mixes into, all on one clock. The app captures each source with Core Audio (an input device directly, an app with a process tap), cleans up microphones, brings every source onto the driver's clock with an adaptive resampler, and mixes them. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) has the details, and [docs/SPIKES.md](docs/SPIKES.md) the measurements behind them.
+Blend installs an audio server plug-in that adds one microphone per mix, plus one hidden device that Blend writes the mixes into, all on one clock. The app captures each source with Core Audio (an input device directly, an app with a process tap), cleans up microphones, brings every source onto the driver's clock with an adaptive resampler, and mixes them. [docs/internals/overview.md](docs/internals/overview.md) has the details, and [docs/internals/measurements.md](docs/internals/measurements.md) the measurements behind them.
 
 ## License
 
