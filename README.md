@@ -2,7 +2,10 @@
 
 Build your own mic. Blend Mic mixes your voice with any app or everything your Mac plays into one microphone, with a slider for each.
 
-<!-- screenshot: 01-panel -->
+<picture>
+  <source srcset="docs/images/panel-dark.png" media="(prefers-color-scheme: dark)">
+  <img src="docs/images/panel-light.png" width="365" alt="Blend Mic's menu bar panel: a mix called Calls, used by Zoom, with sliders and meters for the microphone and Music">
+</picture>
 
 Each mix shows up as a microphone, so any app that lets you pick one can use it: Discord, Zoom, a call recorder, OBS, a website.
 
