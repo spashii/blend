@@ -78,11 +78,68 @@ struct SettingsView: View {
                 model.selection = model.setupComplete
                     ? model.store.mixes.first?.id ?? AppModel.generalTag : AppModel.generalTag
             }
-            if !model.setupComplete {
-                NSApplication.shared.activate()
-            }
         }
         .onDisappear { model.viewDisappeared() }
+        // The window opens itself while setup needs the person, at the first launch and
+        // after an update that brings a new driver; it must then come out in front of
+        // whatever opened Blend. Otherwise Blend stays out of the way.
+        .background(WindowReader { window in
+            if !model.setupComplete {
+                Frontmost.bring(window)
+            }
+        })
+    }
+}
+
+/// Brings a window above every other app's and makes it key. Blend is an accessory app, and
+/// macOS's cooperative NSApp.activate() leaves an accessory app behind the app that was in
+/// front, typically the Finder it was opened from; the call that ignores other apps still
+/// brings it forward. orderFrontRegardless covers a refused activation, so the window is
+/// at least seen. It runs again on the next turn of the main loop, because at launch the
+/// window is placed before it is on screen and before the app has finished launching.
+enum Frontmost {
+    @MainActor
+    static func bring(_ window: NSWindow) {
+        raise(window)
+        Task { @MainActor in raise(window) }
+    }
+
+    @MainActor
+    private static func raise(_ window: NSWindow) {
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
+    }
+}
+
+/// Hands over the window a view is placed in, each time it is placed in one.
+private struct WindowReader: NSViewRepresentable {
+    let placed: (NSWindow) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        Reader(placed: placed)
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {}
+
+    private final class Reader: NSView {
+        let placed: (NSWindow) -> Void
+
+        init(placed: @escaping (NSWindow) -> Void) {
+            self.placed = placed
+            super.init(frame: .zero)
+        }
+
+        required init?(coder: NSCoder) {
+            nil
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let window {
+                placed(window)
+            }
+        }
     }
 }
 
