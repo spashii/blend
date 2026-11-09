@@ -63,10 +63,14 @@ Limits: a browser copy is captured whole, every tab together. Two profiles opene
 - **Not Apple's voice processing unit for echo cancellation.** It ducks other audio and has cut other call apps off the microphone.
 - **Not muting a call app and replaying its audio for echo cancellation.** The call app's own processing then ducks the replay, and its own echo canceller breaks.
 
+## Measured behaviour
+
+- Latency from a microphone into a mix to the mix's device: 29.9 ms median (29.5 to 30.1 ms from the 10th to the 90th percentile) with echo cancellation off, and 74.1 ms median with it on, so echo cancellation adds about 44 ms. Measured on Blend Mic 0.5.0 in a macOS 26 virtual machine: a click train played into BlackHole 2ch used as the mix's microphone, BlackHole and the mix recorded at the same time and cross-correlated, over 61 clicks. A hardware microphone's own converter latency is not included.
+- Changing the microphone's sample rate during a mix leaves a silent gap of 100 to 125 ms at each change, with no crackle and no stuck device.
+
 ## Open questions
 
 - Call apps run their own noise suppression on the microphone they get, and it may treat music in a mix as noise.
-- Latency through the engine is estimated at about 17 ms and has not been measured end to end.
 - No multi-hour soak with several clocks at once (a USB microphone, the built-in microphone and app taps) has been run yet.
 
 [SPIKES.md](SPIKES.md) has the measurements behind these choices.
