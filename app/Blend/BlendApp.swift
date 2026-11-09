@@ -9,11 +9,12 @@ struct BlendApp: App {
             MenuPanel()
                 .environment(delegate.model)
         } label: {
-            Image(delegate.model.menuBarImage, label: Text("Blend"))
+            Image(delegate.model.menuBarImage, label: Text("Blend Mic"))
+                .help("Blend Mic")
         }
         .menuBarExtraStyle(.window)
 
-        Window("Blend", id: "settings") {
+        Window("Blend Mic", id: "settings") {
             SettingsView()
                 .environment(delegate.model)
                 .frame(minWidth: 720, minHeight: 460)
@@ -40,12 +41,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return .terminateNow
         }
         let alert = NSAlert()
-        alert.messageText = "Quit Blend?"
+        alert.messageText = "Quit Blend Mic?"
         alert.informativeText = inUse.map { mix in
             let users = model.status(mix).users
             let who = users.isEmpty ? "An app" : ListFormatter.localizedString(byJoining: users)
             return "\(who) is using \(mix.name)."
-        }.joined(separator: " ") + " It goes silent until Blend opens again."
+        }.joined(separator: " ") + " It goes silent until Blend Mic opens again."
         alert.addButton(withTitle: "Quit")
         alert.addButton(withTitle: "Cancel")
         NSApplication.shared.activate()
@@ -113,7 +114,7 @@ final class AppModel {
     var problems: [String] {
         var list: [String] = []
         if let error = engine.lastError {
-            list.append("Blend couldn't apply your mixes: \(error)")
+            list.append("Blend Mic couldn't apply your mixes: \(error)")
         }
         list.append(contentsOf: store.loadErrors)
         return list
@@ -162,7 +163,7 @@ final class AppModel {
                 return SourceIssue(text: "Not connected", urgent: active)
             }
             if setup.microphone == .denied {
-                return SourceIssue(text: "Blend isn't allowed to use microphones", urgent: active)
+                return SourceIssue(text: "Blend Mic isn't allowed to use microphones", urgent: active)
             }
         case .app:
             if !catalog.isPresent(source) {
@@ -170,7 +171,7 @@ final class AppModel {
                     urgent: active)
             }
             if setup.appAudio == .denied {
-                return SourceIssue(text: "Blend isn't allowed to capture app audio", urgent: active)
+                return SourceIssue(text: "Blend Mic isn't allowed to capture app audio", urgent: active)
             }
             // A call app that picked the mix it is in sends the call back to itself.
             if status.running, let app = catalog.app(for: source),
@@ -180,12 +181,12 @@ final class AppModel {
             }
         case .system:
             if setup.appAudio == .denied {
-                return SourceIssue(text: "Blend isn't allowed to capture app audio", urgent: active)
+                return SourceIssue(text: "Blend Mic isn't allowed to capture app audio", urgent: active)
             }
         }
         if active {
             if !status.live(index) {
-                return SourceIssue(text: "Blend couldn't start capturing it", urgent: true)
+                return SourceIssue(text: "Blend Mic couldn't start capturing it", urgent: true)
             }
             // Apps go quiet all the time; an input device that gives exact zeros is muted or
             // refused.

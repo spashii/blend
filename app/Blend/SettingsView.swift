@@ -200,8 +200,8 @@ private struct SourceEditor: View {
                     TextField("Source name", text: $source.name)
                         .textFieldStyle(.roundedBorder)
                         .help(source.instance == nil
-                            ? "Rename this source; the name is only used inside Blend"
-                            : "Name this copy; Blend uses the name wherever this copy appears")
+                            ? "Rename this source; the name is only used inside Blend Mic"
+                            : "Name this copy; Blend Mic uses the name wherever this copy appears")
                     if let instance = source.instance, !instance.isEmpty {
                         Text(instance)
                             .font(.caption2)
@@ -486,7 +486,7 @@ private struct NewMixSheet: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Create") { create() }
                     .disabled(model.store.mixes.count >= 16)
-                    .help(model.store.mixes.count >= 16 ? "Blend holds 16 mixes. Delete one to add another." : "")
+                    .help(model.store.mixes.count >= 16 ? "Blend Mic holds 16 mixes. Delete one to add another." : "")
             }
         }
     }

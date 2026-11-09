@@ -106,7 +106,7 @@ if [[ -n $profile ]]; then
 fi
 ln -s /Applications $stage/Applications
 dmg=$out/Blend-$version.dmg
-hdiutil create -quiet -volname "Blend $version" -srcfolder $stage -fs HFS+ -format UDZO -ov $dmg
+hdiutil create -quiet -volname "Blend Mic $version" -srcfolder $stage -fs HFS+ -format UDZO -ov $dmg
 if [[ $identity != - ]]; then
   codesign --sign "$identity" $signFlags $dmg
 fi
@@ -125,7 +125,7 @@ releases=${BLEND_RELEASES_URL:-https://github.com/spashii/blend/releases/downloa
 if [[ -n $profile && -f $sparkleKey ]]; then
   signature=$($sparkle/bin/sign_update --ed-key-file $sparkleKey $dmg)
   item="    <item>
-      <title>Blend $version</title>
+      <title>Blend Mic $version</title>
       <pubDate>$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')</pubDate>
       <sparkle:version>$version</sparkle:version>
       <sparkle:shortVersionString>$version</sparkle:shortVersionString>
@@ -146,7 +146,7 @@ if $publish; then
   }
   # The image goes up before the feed that offers it.
   gh release create v$version $dmg $dmg.sha256 --target $(git rev-parse HEAD) \
-    --title "Blend $version" --generate-notes
+    --title "Blend Mic $version" --generate-notes
   git commit -q -m "Blend $version" site/appcast.xml Casks/blend.rb
   git push -q
   echo "Published v$version."

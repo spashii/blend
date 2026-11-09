@@ -1,0 +1,4 @@
+/* The app's name wherever macOS shows it. Info.plist keeps CFBundleDisplayName as the bundle's
+   file name, Blend, which is what lets macOS use this one. */
+CFBundleDisplayName = "Blend Mic";
+CFBundleName = "Blend Mic";
