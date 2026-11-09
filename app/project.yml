@@ -118,6 +118,7 @@ targets:
       - path: BlendTests
       - path: Blend/MixStatus.swift
       - path: Blend/WhenIdle.swift
+      - path: Blend/SupportItems.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.blend.BlendTests
