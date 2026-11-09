@@ -1,10 +1,11 @@
+import CoreAudio
 import XCTest
 
 private func fourCC(_ code: String) -> UInt32 {
     code.utf8.reduce(0) { $0 << 8 | UInt32($1) }
 }
 
-/// Which devices the mix pickers offer as microphones.
+/// Which devices the mix pickers offer as microphones, and how a new source from each starts.
 final class InputDevicesTests: XCTestCase {
     /// The devices Blend's process sees on a MacBook Air with macOS 26.6.2 while a check plays
     /// back (the built-in devices, a mix, and AVAudioEngine's private aggregate, read from a
@@ -43,5 +44,24 @@ final class InputDevicesTests: XCTestCase {
         let lookalike = DeviceRecord(uid: "~:AMS2_Aggregate:1", name: "CADefaultDeviceAggregate-1-1",
             transport: fourCC("grup"), inputChannels: 1, isPrivate: false)
         XCTAssertEqual(InputDevices.inputs([renamed, lookalike]).map(\.uid), ["~:AMS2_Aggregate:1"])
+    }
+
+    func testEchoCancellationStartsOnOnlyForHardwareMicrophones() {
+        let processing = Dictionary(uniqueKeysWithValues: InputDevices.inputs(Self.recorded).map {
+            ($0.name, $0.startingProcessing)
+        })
+        XCTAssertEqual(processing["MacBook Air Microphone"], Processing(echoCancel: true, isolation: .off))
+        XCTAssertEqual(processing["BlackHole 2ch"], Processing(echoCancel: false, isolation: .off))
+        XCTAssertEqual(processing["Aggregate Device"], Processing(echoCancel: false, isolation: .off))
+    }
+
+    func testHardwareTransports() {
+        for code in ["bltn", "usb ", "blue", "blea", "thun", "pci ", "ccwd", "ccwl"] {
+            XCTAssertTrue(InputDevices.isHardware(transport: fourCC(code)), code)
+        }
+        for code in ["virt", "grup", "fgrp"] {
+            XCTAssertFalse(InputDevices.isHardware(transport: fourCC(code)), code)
+        }
+        XCTAssertFalse(InputDevices.isHardware(transport: kAudioDeviceTransportTypeUnknown))
     }
 }

@@ -5,7 +5,17 @@ import CoreAudio
 struct InputDevice: Identifiable, Hashable, Sendable {
     let uid: String
     let name: String
+    /// A physical microphone, as against a virtual or aggregate device.
+    let hardware: Bool
     var id: String { uid }
+
+    /// How a source from this input starts. Echo cancellation takes out what the Mac plays,
+    /// which is what a microphone near the speakers picks up. A virtual input often carries
+    /// that same audio on purpose, routed into it from an app, and echo cancellation would
+    /// erase it. Isolation is left to the person, since it adds delay.
+    var startingProcessing: Processing {
+        Processing(echoCancel: hardware, isolation: .off)
+    }
 }
 
 /// One audio device as the HAL reports it to Blend's own process.
@@ -23,7 +33,8 @@ enum InputDevices {
     /// Devices with input channels, other than Blend's own, in the HAL's order.
     static func inputs(_ devices: [DeviceRecord]) -> [InputDevice] {
         devices.filter { $0.inputChannels > 0 && !isBlends($0) }.map { device in
-            InputDevice(uid: device.uid, name: device.name)
+            InputDevice(uid: device.uid, name: device.name,
+                hardware: isHardware(transport: device.transport))
         }
     }
 
@@ -35,4 +46,25 @@ enum InputDevices {
     static func isBlends(_ device: DeviceRecord) -> Bool {
         device.uid.hasPrefix("app.blend.") || device.isPrivate
     }
+
+    /// Transports that carry a physical microphone. Virtual and aggregate devices, and any
+    /// device that doesn't say, count as not hardware.
+    static func isHardware(transport: UInt32) -> Bool {
+        hardwareTransports.contains(transport)
+    }
+
+    private static let hardwareTransports: Set<UInt32> = [
+        kAudioDeviceTransportTypeBuiltIn,
+        kAudioDeviceTransportTypeUSB,
+        kAudioDeviceTransportTypeBluetooth,
+        kAudioDeviceTransportTypeBluetoothLE,
+        kAudioDeviceTransportTypeFireWire,
+        kAudioDeviceTransportTypePCI,
+        kAudioDeviceTransportTypeThunderbolt,
+        kAudioDeviceTransportTypeHDMI,
+        kAudioDeviceTransportTypeDisplayPort,
+        kAudioDeviceTransportTypeAVB,
+        kAudioDeviceTransportTypeContinuityCaptureWired,
+        kAudioDeviceTransportTypeContinuityCaptureWireless,
+    ]
 }

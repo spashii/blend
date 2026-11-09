@@ -371,7 +371,7 @@ private struct SourcePicker: View {
                             Spacer()
                             Button("Add") {
                                 pick(.device(uid: input.uid, name: input.name,
-                                    processing: Processing(echoCancel: true, isolation: .off)))
+                                    processing: input.startingProcessing))
                             }
                         }
                     }
@@ -561,11 +561,8 @@ private struct NewMixSheet: View {
     }
 
     private func create() {
-        // Echo cancellation on, so the mix works on speakers; isolation is left to the
-        // person, since it adds delay.
         var sources = model.catalog.inputs.first { $0.uid == micUID }.map { mic in
-            [MixSource.device(uid: mic.uid, name: mic.name,
-                processing: Processing(echoCancel: true, isolation: .off))]
+            [MixSource.device(uid: mic.uid, name: mic.name, processing: mic.startingProcessing)]
         } ?? []
         if systemAudio {
             sources.append(.system())
