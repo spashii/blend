@@ -6,7 +6,7 @@ What was measured, what came out, and the constraint it put on the design. Unles
 
 - From a microphone into a mix to the mix's device: 29.9 ms median (29.5 to 30.1 ms from the 10th to the 90th percentile) with echo cancellation off, and 74.1 ms median with it on, so echo cancellation adds about 44 ms.
 - Method: Blend Mic 0.5.0 in a macOS 26 virtual machine. A click train was played into BlackHole 2ch, used as the mix's microphone; BlackHole and the mix were recorded at the same time and cross-correlated over 61 clicks. A hardware microphone's own converter latency is not included.
-- Changing the microphone's sample rate during a mix leaves a silent gap of 100 to 125 ms at each change, with no crackle and no stuck device.
+- Changing the microphone's sample rate during a mix (48, 44.1, 96, 48 and 88.2 kHz in turn) leaves a silent gap of 75 to 126 ms in the mix at each change, with no crackle and no stuck device. A plain reader of the same microphone gets 32 to 43 ms gaps.
 
 ## Driver lifecycle
 
@@ -17,6 +17,14 @@ Run: `lab loop`, `lab stress`, `lab remove-live`, and killing the bus writer whi
 - About 25 add and remove cycles within one second hang coreaudiod; SIGTERM no longer works and only `kill -9` recovers it. At two changes a second, 100 cycles run clean. With the driver coalescing changes (latest list wins, at most one device list change per 250 ms), the burst test passes 100 cycles with no glitches and no silence on the recorded mix. New mixes appear about 320 ms after they are asked for.
 - Removing a device while an app records from it hangs coreaudiod, the failure roc-vad reported. With the driver silencing the mix at once and removing it only after its IO stops (polled every 250 ms), the reader gets silence immediately, nothing hangs, and the device disappears 55 ms after the reader stops. The reading app still sees `IsAlive = 1` a second later, so apps are not told to switch; the UI has to say which app still uses it.
 - Rebooting with a mix in use passed (macOS 26 virtual machine).
+
+## Install, update and uninstall
+
+Run in a macOS 26 virtual machine (tart, Cirrus Labs image, macOS 26.6.2), 9 Nov 2026.
+
+- A fresh install of 0.5.0 from the downloaded disk image passed Gatekeeper, installed the driver with the admin password, and granted the microphone, system audio and login item. A mix of Music recorded in QuickTime carried the test track.
+- Sparkle offered 0.6.2 to 0.5.0 and installed and relaunched it with a valid signature.
+- Uninstall on 0.5.0 and 0.6.2 removed the driver, Application Support and the privacy grants, moved the app to the Trash, and left coreaudiod idle with sound still playing. It left an empty preferences file and a disabled login-item record. 0.6.3 also removes the preferences, caches and saved state; that cleanup has not been re-checked in the virtual machine. macOS keeps the disabled login-item record, and no public API removes it.
 
 ## App capture
 
@@ -43,6 +51,7 @@ Run: `spikes/echo/session.sh` played speech then music at 25, 50 and 100% throug
 - Weak spots: the first 3 seconds while the filter adapts (5 dB), and quiet music (8 dB).
 - AEC3 estimated the reference 4 ms ahead of the mic. Mic and tap in one aggregate are aligned well enough that Chrome's 170 ms extra capture delay is not needed.
 - Not run: double talk and near-end-only takes, which need someone speaking.
+- With echo cancellation on, a signal played into a loopback device such as BlackHole is cancelled out of the mix (-91 dBFS against -15 dBFS), because the echo reference contains the process doing the playing. Echo cancellation starts off for virtual devices since 0.6.2.
 
 ## Voice isolation
 
