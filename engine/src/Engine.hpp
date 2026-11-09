@@ -8,9 +8,13 @@
 // Threads: every change runs on a private serial queue, because HAL calls there can be
 // slow. Callers never wait for that queue: Apply and the check and probe calls return at
 // once, and Status, CopyCheck and ProbeLevels read a snapshot the queue publishes.
+//
+// Nothing runs on a timer while no mix is read or checked: the sweep runs only with the
+// bus, and SetObserver tells the app when the snapshot changes, so it need not poll.
 
 #include "Config.hpp"
 #include "MixMath.hpp"
+#include "RepeatingTimer.hpp"
 #include "Sources.hpp"
 
 #include <CoreAudio/CoreAudio.h>
@@ -48,6 +52,12 @@ public:
         std::vector<bool> sourceLive;   // per source: capturing right now
     };
     std::vector<MixStatus> Status();
+
+    // Called on the main queue after the snapshot Status reads changes: a mix starts or
+    // stops being read or checked, its readers or device change, a source starts or stops.
+    // Between those only the levels move, and only while a mix is read or checked. Changes
+    // that land before the main queue runs are delivered once.
+    void SetObserver(dispatch_block_t changed);
 
     // Human-readable state for tests and bug reports. Waits for the engine queue.
     std::string Diagnostics();
@@ -130,6 +140,7 @@ private:
     void StopBus();
     void PublishGraph();
     void PublishSnapshot();
+    void Notify();
     void RetireLater(std::function<void()> fn);
     void Sweep();
     void Recover();
@@ -149,7 +160,12 @@ private:
     void Render(AudioBufferList* output);
 
     dispatch_queue_t queue_;
-    dispatch_source_t sweepTimer_ = nullptr;
+    // Retires old graphs, restarts stale sources and retries failed ones, all of which
+    // concern a running bus, so it runs only between StartBus and StopBus.
+    std::unique_ptr<RepeatingTimer> sweep_;
+    dispatch_block_t observer_ = nullptr;
+    // Outlives the engine, since a delivery already queued on the main queue holds it.
+    std::shared_ptr<std::atomic<bool>> notifyPending_ = std::make_shared<std::atomic<bool>>(false);
     bool shuttingDown_ = false;
     // HAL listener blocks can be delivered after removal; they hold this token and check it
     // before touching the engine, which may be gone by then.

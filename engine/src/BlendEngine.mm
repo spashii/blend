@@ -62,6 +62,11 @@ size_t BlendEngineStatus(BlendEngine* engine, BlendMixStatus* statuses, size_t c
     return n;
 }
 
+void BlendEngineSetObserver(BlendEngine* engine, void (^changed)(void))
+{
+    engine->engine.SetObserver(changed);
+}
+
 char* BlendEngineDiagnostics(BlendEngine* engine)
 {
     return strdup(engine->engine.Diagnostics().c_str());

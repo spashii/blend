@@ -64,10 +64,7 @@ Engine::Engine()
 {
     monitor_ = std::make_unique<MonitorOutput>(
         [this](std::function<void()> fn) { RetireLater(std::move(fn)); });
-    sweepTimer_ = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, queue_);
-    dispatch_source_set_timer(sweepTimer_, dispatch_time(DISPATCH_TIME_NOW, 0),
-        100 * NSEC_PER_MSEC, 20 * NSEC_PER_MSEC);
-    dispatch_source_set_event_handler(sweepTimer_, ^{
+    sweep_ = std::make_unique<RepeatingTimer>(queue_, 100 * NSEC_PER_MSEC, 20 * NSEC_PER_MSEC, ^{
         if (shuttingDown_) {
             return;
         }
@@ -77,7 +74,6 @@ Engine::Engine()
             RetryFailedSources();
         }
     });
-    dispatch_resume(sweepTimer_);
     dispatch_sync(queue_, ^{ AddSystemListeners(); });
 }
 
@@ -85,10 +81,11 @@ Engine::Engine()
 // stopped first, and every block checks shuttingDown_ before touching anything.
 Engine::~Engine()
 {
-    dispatch_source_cancel(sweepTimer_);
     dispatch_sync(queue_, ^{
         shuttingDown_ = true;
         alive_->store(false);
+        sweep_->Stop();
+        observer_ = nullptr;
         RemoveSystemListeners();
         for (auto& [id, mix] : mixDevices_) {
             RemoveMixListener(mix);
@@ -402,6 +399,7 @@ void Engine::StartBus()
         return;
     }
     busRunning_ = true;
+    sweep_->Start();
 }
 
 void Engine::StopBus()
@@ -412,6 +410,7 @@ void Engine::StopBus()
         busProc_ = nullptr;
     }
     busRunning_ = false;
+    sweep_->Stop();
     Sweep();
 }
 
@@ -488,8 +487,34 @@ void Engine::PublishSnapshot()
         next.mixes.push_back(std::move(entry));
     }
     next.probes = probes_;
-    std::lock_guard lock(snapshotMutex_);
-    snapshot_ = std::move(next);
+    {
+        std::lock_guard lock(snapshotMutex_);
+        snapshot_ = std::move(next);
+    }
+    Notify();
+}
+
+void Engine::SetObserver(dispatch_block_t changed)
+{
+    dispatch_async(queue_, ^{
+        if (!shuttingDown_) {
+            observer_ = changed;
+        }
+    });
+}
+
+// The flag clears before the observer runs, so a change during its read is delivered again.
+void Engine::Notify()
+{
+    if (!observer_ || notifyPending_->exchange(true)) {
+        return;
+    }
+    auto pending = notifyPending_;
+    dispatch_block_t observer = observer_;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        pending->store(false);
+        observer();
+    });
 }
 
 void Engine::RetireLater(std::function<void()> fn)
@@ -562,6 +587,7 @@ void Engine::Recover()
         busProc_ = nullptr;
     }
     busRunning_ = false;
+    sweep_->Stop();
     bus_ = kAudioObjectUnknown;
     for (auto& [key, source] : sources_) {
         source->Stop();
@@ -905,7 +931,8 @@ std::string Engine::Diagnostics()
     dispatch_sync(queue_, ^{
         std::ostringstream out;
         out << "bus " << (busRunning_ ? "running" : "stopped") << " rate " << busRate_
-            << " frames " << busFrames_ << " cycles " << cycles_.load() << "\n";
+            << " frames " << busFrames_ << " cycles " << cycles_.load() << " sweep "
+            << (sweep_->Running() ? "on" : "off") << " sweeps " << sweeps_ << "\n";
         for (const auto& [id, mix] : mixDevices_) {
             const bool split = std::any_of(config_.mixes.begin(), config_.mixes.end(),
                 [&](const MixConfig& m) { return m.id == id && m.split; });

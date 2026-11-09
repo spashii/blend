@@ -1,8 +1,9 @@
 import Foundation
 import Observation
 
-/// Owns the C++ engine. Every preset change sends the whole configuration; status is polled
-/// for meters and the "in use" state. None of these calls wait on the engine's work.
+/// Owns the C++ engine. Every preset change sends the whole configuration. Status is read
+/// every 100 ms while a Blend view is open or an app reads a mix, and otherwise only when
+/// the engine reports a change (StatusPolling). None of these calls wait on the engine's work.
 @MainActor
 @Observable
 final class EngineBridge {
@@ -10,7 +11,7 @@ final class EngineBridge {
     private(set) var lastError: String?
 
     @ObservationIgnored nonisolated(unsafe) private let engine: OpaquePointer
-    @ObservationIgnored private var timer: Timer?
+    @ObservationIgnored private var polling: StatusPolling?
     @ObservationIgnored private let encoder = JSONEncoder()
     /// When each live source last carried anything but exact zeros, by mix and position.
     @ObservationIgnored private var lastSound: [String: Date] = [:]
@@ -18,13 +19,22 @@ final class EngineBridge {
 
     init() {
         engine = BlendEngineCreate()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.poll() }
+        polling = StatusPolling(
+            read: { [weak self] in self?.poll() ?? false },
+            quiet: { [weak self] in self?.dropLevels() })
+        // The engine calls this on the main queue.
+        BlendEngineSetObserver(engine) { [weak self] in
+            MainActor.assumeIsolated { self?.polling?.changed() }
         }
     }
 
     deinit {
         BlendEngineDestroy(engine)
+    }
+
+    /// Whether the panel or the settings window is open, so meters are on screen.
+    func setViewsOpen(_ open: Bool) {
+        polling?.setViewsOpen(open)
     }
 
     func apply(_ mixes: [Mix]) {
@@ -105,7 +115,8 @@ final class EngineBridge {
         String(decoding: chars.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
     }
 
-    private func poll() {
+    /// Reads the engine's status and says whether any app is reading a mix.
+    private func poll() -> Bool {
         var raw = [BlendMixStatus](repeating: BlendMixStatus(), count: 16)
         let count = BlendEngineStatus(engine, &raw, raw.count)
         var next: [String: MixStatus] = [:]
@@ -149,6 +160,14 @@ final class EngineBridge {
         lastSound = heard
         if next != statuses {
             statuses = next
+        }
+        return next.values.contains { $0.running }
+    }
+
+    private func dropLevels() {
+        let quiet = statuses.mapValues(\.withoutLevels)
+        if quiet != statuses {
+            statuses = quiet
         }
     }
 }

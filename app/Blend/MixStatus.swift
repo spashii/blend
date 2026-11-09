@@ -23,6 +23,14 @@ struct MixStatus: Equatable, Sendable {
     func level(_ index: Int) -> Float {
         sourcePeaks.indices.contains(index) ? sourcePeaks[index] : 0
     }
+
+    /// The same status with every meter at zero.
+    var withoutLevels: MixStatus {
+        var quiet = self
+        quiet.peak = 0
+        quiet.sourcePeaks = sourcePeaks.map { _ in 0 }
+        return quiet
+    }
 }
 
 extension MixStatus {

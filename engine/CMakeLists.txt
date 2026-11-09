@@ -65,3 +65,8 @@ add_executable(BlendProcessingTests tests/ProcessingTests.mm)
 target_link_libraries(BlendProcessingTests PRIVATE BlendEngine)
 target_compile_options(BlendProcessingTests PRIVATE -fobjc-arc)
 add_test(NAME processing COMMAND BlendProcessingTests)
+
+add_executable(BlendTimerTests tests/TimerTests.mm)
+target_link_libraries(BlendTimerTests PRIVATE BlendEngine)
+target_compile_options(BlendTimerTests PRIVATE -fobjc-arc)
+add_test(NAME timer COMMAND BlendTimerTests)
