@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Blend: a volume mixer for your Mac's microphone</title>
-<meta name="description" content="A menu bar app that makes virtual microphones from your mic, any app's audio or all system audio, with a slider for each. Free and open source, for macOS.">
-<meta property="og:title" content="Blend: a volume mixer for your Mac's microphone">
-<meta property="og:description" content="Your mic, any app and system audio, each with a slider, mixed into a microphone you can pick in Discord, a call recorder or OBS.">
+<title>Blend Mic: mix your mic with any app's sound on your Mac</title>
+<meta name="description" content="Blend Mic mixes your voice and your Mac's sound into one microphone. Record a call with headphones on, or play music into Discord. Free and open source, for macOS.">
+<meta property="og:title" content="Blend Mic: mix your mic with any app's sound on your Mac">
+<meta property="og:description" content="Blend Mic mixes your voice and your Mac's sound into one microphone. Record a call with headphones on, or play music into Discord. Free and open source, for macOS.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <style>
   :root {
@@ -43,7 +43,7 @@
   .meter { height: 3px; margin-top: 6px; border-radius: 2px; background: linear-gradient(90deg, var(--green) var(--level), var(--line) var(--level)); }
   .panel footer { display: flex; justify-content: space-between; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); }
 
-  .points { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding-bottom: 72px; }
+  .points { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; padding-bottom: 72px; }
   .point { background: var(--card); border-radius: 16px; box-shadow: var(--ring); padding: 24px; }
   .point h2 { font-size: 17px; letter-spacing: -.01em; }
   .point p { margin-top: 6px; color: var(--muted); font-size: 15px; }
@@ -67,72 +67,82 @@
     .why { font-size: 17px; padding-bottom: 40px; }
     .rough { padding-bottom: 56px; }
   }
+  .shot img, .shots img { display: block; width: 100%; height: auto; border-radius: 14px; }
+  .hero-shot { justify-self: center; max-width: 365px; width: 100%; }
+  .shots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; padding: 0 0 64px; }
+  .shots figure { margin: 0; }
+  .shots img { border: 1px solid var(--line); }
+  .shots figcaption { margin-top: 10px; color: var(--muted); font-size: 15px; }
+  @media (max-width: 780px) { .shots { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
 <main>
   <section class="hero">
     <div>
-      <h1>A volume mixer for your Mac's microphone.</h1>
-      <p class="lede">Mix your mic, any app or everything your Mac plays into one microphone, with a slider for each. Pick it in Discord, a call recorder or OBS.</p>
+      <h1>Build your own mic.</h1>
+      <p class="lede">Blend Mic mixes your voice with any app or everything your Mac plays into one microphone, with a slider for each. Record a call with your AirPods in, or play music into Discord under your voice.</p>
       <div class="actions">
-        <a class="button primary" href="https://apps.idea2prod.in/blend/download">Download for Mac</a>
+        <a class="button primary" href="https://github.com/spashii/blend/releases/latest">Download for Mac</a>
         <a class="button" href="https://github.com/spashii/blend">View on GitHub</a>
       </div>
-      <p class="meta">Free and open source · Apple silicon, macOS 15 or later</p>
+      <p class="meta">Free and open source (MIT) · Updates itself · Apple silicon, macOS 15 or later</p>
     </div>
-    <div class="panel" role="img" aria-label="Blend's menu bar panel: a mix called Blend Mic, used by Discord, with sliders for the microphone, Spotify and system audio">
-      <header><span>Blend</span><span>+</span></header>
-      <div class="mix">▾ Blend Mic <small><span class="dot"></span>Used by Discord</small></div>
-      <div class="source">
-        <span>MacBook Air Microphone</span>
-        <div class="slider"><i style="width:72%"></i><b style="left:72%"></b></div>
-        <div class="meter" style="--level:58%"></div>
-      </div>
-      <div class="source">
-        <span>Spotify</span>
-        <div class="slider"><i style="width:34%"></i><b style="left:34%"></b></div>
-        <div class="meter" style="--level:30%"></div>
-      </div>
-      <div class="source">
-        <span>System audio</span>
-        <div class="slider"><i style="width:50%"></i><b style="left:50%"></b></div>
-        <div class="meter" style="--level:44%"></div>
-      </div>
-      <footer><span>Settings…</span><span>Quit Blend</span></footer>
-    </div>
+    <picture class="shot hero-shot">
+      <source srcset="screens/01-panel-dark.png" media="(prefers-color-scheme: dark)">
+      <img src="screens/01-panel-light.png" width="365" alt="Blend Mic's menu bar panel: a mix called Calls, used by Zoom, with sliders and meters for the microphone and Music">
+    </picture>
+  </section>
+
+  <section class="shots">
+    <figure>
+      <picture><source srcset="screens/03-add-source-dark.png" media="(prefers-color-scheme: dark)"><img src="screens/03-add-source-light.png" alt="The Add a source sheet: inputs, system audio, and each app playing sound with a live meter" loading="lazy"></picture>
+      <figcaption>Add your mic, one app, or everything your Mac plays.</figcaption>
+    </figure>
+    <figure>
+      <picture><source srcset="screens/04-split-dark.png" media="(prefers-color-scheme: dark)"><img src="screens/04-split-light.png" alt="A Call recorder mix with Split by channel on: the microphone on the left channel and Zoom on the right" loading="lazy"></picture>
+      <figcaption>Split mode: you on the left, the call on the right.</figcaption>
+    </figure>
+    <figure>
+      <picture><source srcset="screens/06-zoom-mic-menu-dark.png" media="(prefers-color-scheme: dark)"><img src="screens/06-zoom-mic-menu-light.png" alt="Zoom's audio settings with the Calls mix picked as the microphone" loading="lazy"></picture>
+      <figcaption>Each mix is a microphone you pick in Zoom, Discord or a recorder.</figcaption>
+    </figure>
   </section>
 
   <section class="why">
-    <p>I wanted something simple to hook into Discord and my call recorder. BlackHole needed a lot of setup before anything worked, and Loopback costs $99, so I made one that sits in the menu bar.</p>
+    <p>I wanted something simple to hook into Discord and my call recorder. BlackHole needed a lot of setup before anything worked, and Loopback costs $99, so I made one that sits in the menu bar. It takes an app's sound without rerouting it, so you keep hearing it, and it leaves the call out of system audio, so the call never hears itself.</p>
   </section>
 
   <section class="points">
+    <div class="point">
+      <h2>Record calls with headphones on</h2>
+      <p>Your recorder picks Blend Mic and hears you and the call, even with AirPods in. Split mode puts you on the left and the call on the right, and <a href="https://spashii.github.io/voice/">Voice</a> uses it to transcribe each side. Tell the other side you're recording.</p>
+    </div>
     <div class="point">
       <h2>Mic, apps or all system audio</h2>
       <p>Any input device, any app or everything the Mac plays. A call using the mix never hears itself.</p>
     </div>
     <div class="point">
-      <h2>Split by channel</h2>
-      <p>Your mic on the left, the call on the right, so a recorder keeps the two sides apart. <a href="https://apps.idea2prod.in/voice/">Voice</a> uses this.</p>
-    </div>
-    <div class="point">
       <h2>Up to 16 mixes</h2>
       <p>Each mix is its own microphone, so Discord can use one while a recorder uses another.</p>
+    </div>
+    <div class="point">
+      <h2>Updates itself</h2>
+      <p>New versions install on their own while no app is using a mix, so a call is never cut off.</p>
     </div>
   </section>
 
   <section class="rough">
     <h2>Rough edges</h2>
-    <p>Apple silicon only. It installs an audio driver, and mixes go silent while Blend is closed.</p>
+    <p>Apple silicon, macOS 15 or later. It installs a Core Audio plug-in that runs in user space, not a kernel extension, and Uninstall in its settings removes it. Mixes go silent while Blend Mic is closed, so turn on Open at login.</p>
   </section>
 
   <section class="bottom">
-    <p>Your audio never leaves your Mac, and there are no accounts. Update checks and downloads go through apps.idea2prod.in, which counts them by app, version and country and never stores your IP address.</p>
+    <p>Your audio never leaves your Mac, and there are no accounts. Blend Mic checks for updates once a day, and the update server counts those checks by app, version and country and never stores your IP address.</p>
     <div class="actions">
-      <a class="button primary" href="https://apps.idea2prod.in/blend/download">Download for Mac</a>
+      <a class="button primary" href="https://github.com/spashii/blend/releases/latest">Download for Mac</a>
     </div>
-    <p class="brew">Or with Homebrew: <code>brew install --cask blend</code> after <code>brew tap spashii/blend https://github.com/spashii/blend</code></p>
+    <p class="brew">Or with Homebrew: <code>brew tap spashii/blend https://github.com/spashii/blend</code>, then <code>brew trust spashii/blend</code> and <code>brew install --cask blend</code></p>
   </section>
 </main>
 <footer class="site">Made by <a href="https://github.com/spashii">Sameer</a>. MIT licensed. <a href="https://github.com/spashii/blend">Source on GitHub</a></footer>
