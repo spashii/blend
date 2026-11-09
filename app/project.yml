@@ -122,6 +122,7 @@ targets:
       - path: Blend/StatusPolling.swift
       - path: Blend/InputDevices.swift
       - path: Blend/Model.swift
+      - path: Blend/Leftovers.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.blend.BlendTests
