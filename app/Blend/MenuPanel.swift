@@ -10,7 +10,7 @@ struct MenuPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Blend").font(.headline)
+                Text("Blend Mic").font(.headline)
                 Spacer()
                 Button {
                     model.showingNewMix = true
@@ -33,7 +33,7 @@ struct MenuPanel: View {
                     model.selection = AppModel.generalTag
                     openSettings()
                 } label: {
-                    Label(model.setup.driver == .current ? "Finish setting up Blend…" : "Install the audio driver…",
+                    Label(model.setup.driver == .current ? "Finish setting up Blend Mic…" : "Install the audio driver…",
                         systemImage: "exclamationmark.circle.fill")
                 }
                 .buttonStyle(.borderless)
@@ -60,7 +60,7 @@ struct MenuPanel: View {
             HStack {
                 Button("Settings…") { openSettings() }
                 Spacer()
-                Button("Quit Blend") { NSApplication.shared.terminate(nil) }
+                Button("Quit Blend Mic") { NSApplication.shared.terminate(nil) }
             }
             .buttonStyle(.borderless)
         }

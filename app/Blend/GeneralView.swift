@@ -43,22 +43,22 @@ struct GeneralView: View {
                     }
                 }
                 Toggle("Check for updates automatically", isOn: $updates.automatic)
-                Text("Blend works on this Mac. It goes online only to check for updates.")
+                Text("Blend Mic works on this Mac. It goes online only to check for updates.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 Button("Licenses") { openLicenses() }
-                    .help("Blend's license and those of the libraries it includes")
+                    .help("Blend Mic's license and those of the libraries it includes")
             }
 
             Section {
-                Button("Uninstall Blend…", role: .destructive) { confirmingUninstall = true }
+                Button("Uninstall Blend Mic…", role: .destructive) { confirmingUninstall = true }
                     .disabled(setup.working)
             } footer: {
-                Text("Removes the driver, your mixes and Blend's settings, then moves Blend to the Trash.")
+                Text("Removes the driver, your mixes and Blend Mic's settings, then moves Blend Mic to the Trash.")
             }
         }
         .formStyle(.grouped)
-        .confirmationDialog("Uninstall Blend?", isPresented: $confirmingUninstall) {
+        .confirmationDialog("Uninstall Blend Mic?", isPresented: $confirmingUninstall) {
             Button("Uninstall", role: .destructive) {
                 Task { await model.uninstall() }
             }
@@ -156,7 +156,7 @@ private struct DriverRow: View {
                 }
             case .different:
                 StepRow(title: "Audio driver", done: false,
-                    detail: "Blend was updated, and the driver needs the same update.") {
+                    detail: "Blend Mic was updated, and the driver needs the same update.") {
                     InstallButton(title: "Update…")
                 }
             case .notBundled:
@@ -229,7 +229,7 @@ private struct LoginRow: View {
         let status = model.setup.openAtLogin
         StepRow(title: "Open at login", done: status == .enabled,
             detail: status == .requiresApproval ? "Waiting for your approval in System Settings."
-                : status == .enabled ? nil : "Mixes only work while Blend is open.") {
+                : status == .enabled ? nil : "Mixes only work while Blend Mic is open.") {
             if status == .requiresApproval {
                 Button("Open Settings…") { Permissions.openLoginItemSettings() }
             } else {

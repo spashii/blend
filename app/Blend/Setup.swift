@@ -95,7 +95,7 @@ enum Driver {
             rmdir "$tmp"
             \(restartAudio)
             """
-        try await Admin.run(script, prompt: "Blend is installing its audio driver.")
+        try await Admin.run(script, prompt: "Blend Mic is installing its audio driver.")
     }
 
     static func uninstall() async throws {
@@ -104,7 +104,7 @@ enum Driver {
             rm -rf /Library/Audio/Plug-Ins/HAL/BlendDriver.driver
             \(restartAudio)
             """
-        try await Admin.run(script, prompt: "Blend is removing its audio driver.")
+        try await Admin.run(script, prompt: "Blend Mic is removing its audio driver.")
     }
 
     /// restart-audio.sh, which the development helper shares; it fails with a message when
