@@ -36,7 +36,7 @@ app audio (process tap) ──┘
 ## Microphone processing
 
 - A microphone source can have echo cancellation and voice isolation, each set per source. Two mixes that use the same microphone with the same settings share one capture and one processing chain (`engine/src/MicProcessor.hpp`).
-- Echo cancellation is WebRTC's AEC3 from the [freedesktop.org package](https://gitlab.freedesktop.org/pulseaudio/webrtc-audio-processing), the same canceller Chrome uses. Its reference is a tap of everything the Mac plays except Blend itself, captured in one private aggregate device together with the microphone, so both arrive in the same IO cycle. Blend is left out because its own output carries the mixes, which contain the microphone.
+- Echo cancellation is WebRTC's AEC3 from the [freedesktop.org package](https://gitlab.freedesktop.org/pulseaudio/webrtc-audio-processing), the same canceller Chrome uses. Its reference is a tap of everything the Mac plays except Blend itself, captured in one private aggregate device together with the microphone, so both arrive in the same IO cycle. Blend is left out because its own output carries the mixes, which contain the microphone. A new source starts with it on only for a microphone on a physical transport (built in, USB, Bluetooth and the like): a virtual or aggregate input such as BlackHole often carries what the Mac plays on purpose, and the canceller would erase it.
 - Voice isolation is Apple's AUSoundIsolation audio unit, run after echo cancellation, with the standard or the High Quality Voice model.
 - Both run on the microphone's capture thread in 10 ms blocks. If a stage fails (a sample rate AEC3 refuses, say), it is skipped and the microphone goes on unprocessed rather than silent.
 
