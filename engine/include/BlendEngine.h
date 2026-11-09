@@ -37,6 +37,13 @@ bool BlendEngineApply(BlendEngine* engine, const char* json, char* error, size_t
 // Writes up to capacity statuses in configuration order and returns how many were written.
 size_t BlendEngineStatus(BlendEngine* engine, BlendMixStatus* statuses, size_t capacity);
 
+// Calls changed on the main queue whenever anything but the levels in BlendEngineStatus may
+// have changed: a mix starts or stops being read or checked, its readers or its device
+// change, a source starts or stops. Levels move only while a mix is read or checked, so a
+// caller needs to read the status on a timer only then or while it shows meters, and can
+// otherwise wait for this. Changes that land before the main queue runs are delivered once.
+void BlendEngineSetObserver(BlendEngine* engine, void (^changed)(void));
+
 // Returns a malloc'd, human-readable summary; free it with free().
 char* BlendEngineDiagnostics(BlendEngine* engine);
 
