@@ -31,7 +31,7 @@ Measured in a macOS 26 virtual machine by playing a click train into BlackHole u
 
 ## When a microphone changes sample rate
 
-AirPods and some other microphones switch sample rate when they start or stop being used for calls. Each change leaves a silence of 100 to 125 ms in the mix, with no crackle, and the mix keeps working.
+AirPods and some other microphones switch sample rate when they start or stop being used for calls. Each change leaves a silence of 75 to 126 ms in the mix, with no crackle, and the mix keeps working.
 
 ## Not tested yet
 
