@@ -108,11 +108,16 @@ final class MoveToApplicationsTests: XCTestCase {
 
     func testAsksForAdministratorRightsWhenTheFolderIsNotWritable() throws {
         let root = FileManager.default.temporaryDirectory.appending(path: "MoveTests-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: root) }
+        let applications = root.appending(path: "Applications")
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: applications.path)
+            try? FileManager.default.removeItem(at: root)
+        }
         let source = try makeApp(at: root, contents: "new")
+        try FileManager.default.createDirectory(at: applications, withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o555])
         var asked = false
-        let missing = root.appending(path: "no/such/Applications")
-        _ = try MoveToApplications.move(source, into: missing, isRunning: { _ in false },
+        _ = try MoveToApplications.move(source, into: applications, isRunning: { _ in false },
             elevated: { _, _, _ in asked = true })
         XCTAssertTrue(asked)
     }
