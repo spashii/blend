@@ -34,7 +34,7 @@ struct GeneralView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                 } footer: {
-                    Text("A mix is a microphone you put together: choose what goes in, set the volumes, then pick it in Discord, a call recorder or any other app.")
+                    Text("A mix is a microphone you put together: choose what goes in, set the volumes, then pick it in your dictation app, Discord or any other app.")
                 }
             }
 
