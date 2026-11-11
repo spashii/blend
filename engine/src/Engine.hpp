@@ -81,6 +81,7 @@ private:
         MixState();
         std::atomic<float> peak{0};
         LimiterState limiter; // bus thread only
+        DuckState duck;       // bus thread only
         // Recent output, written by the bus thread; `written` counts frames ever written.
         std::vector<float> history;
         std::atomic<uint64_t> written{0};
@@ -93,6 +94,8 @@ private:
         uint32_t slot = 0;
         float gain = 1;
         bool split = false;                            // see MixMath.hpp
+        bool duck = false;                             // lower the Ducked entries under a Key
+        std::vector<Role> roles;                       // per entry
         std::vector<uint32_t> sources;                 // index into Graph::sources
         std::vector<Route> routes;                     // per entry
         std::vector<float> targets;                    // linear gain per entry

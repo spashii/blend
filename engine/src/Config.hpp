@@ -3,7 +3,7 @@
 // The engine's whole desired state, sent by the app as JSON on every change:
 //
 // {"mixes": [{"id": "8c1e", "name": "Call", "slot": 0, "gainDb": 0, "muted": false,
-//   "split": false,
+//   "split": false, "duck": false,
 //   "sources": [{"id": "s1", "kind": "device", "uid": "BuiltInMicrophoneDevice",
 //                "gainDb": 0, "muted": false,
 //                "processing": {"echoCancel": true, "isolation": "standard"}},
@@ -69,6 +69,9 @@ struct MixConfig
     bool muted = false;
     // Set only when the mix also has exactly two sources.
     bool split = false;
+    // Lower the other sources while a microphone in the mix is talking (MixMath.hpp). Never
+    // set on a split mix, which a recorder wants at full level.
+    bool duck = false;
     std::vector<SourceConfig> sources;
 };
 

@@ -453,7 +453,12 @@ void Engine::PublishGraph()
                     : position == 0             ? Route::Left
                                                 : Route::Right);
             plan.targets.push_back(source.muted ? 0 : DbToGain(source.gainDb));
+            plan.roles.push_back(source.kind == SourceConfig::Kind::Device ? Role::Key
+                                                                            : Role::Ducked);
         }
+        plan.duck = mix.duck
+            && std::count(plan.roles.begin(), plan.roles.end(), Role::Key) > 0
+            && std::count(plan.roles.begin(), plan.roles.end(), Role::Ducked) > 0;
         plan.current = std::make_unique<std::atomic<float>[]>(plan.sources.size());
         for (size_t i = 0; i < plan.sources.size(); i++) {
             auto it = previous.find({mix.id, graph->sources[plan.sources[i]]->Key()});
@@ -728,13 +733,13 @@ void Engine::Render(AudioBufferList* output)
         for (auto& mix : graph->mixes) {
             float* acc = mixBuffer_.data();
             std::memset(acc, 0, sizeof(float) * frames * 2);
-            for (size_t e = 0; e < mix.sources.size(); e++) {
-                const float* src = &scratch_[mix.sources[e] * kMaxFrames * 2];
-                const float from = mix.current[e].load(std::memory_order_relaxed);
-                const float to = mix.targets[e];
-                AddSource(acc, src, frames, from, to, mix.gain, mix.routes[e]);
-                mix.current[e].store(to, std::memory_order_relaxed);
+            // A mix with ducking off keeps no duck state, so turning it on starts from 0 dB.
+            if (!mix.duck) {
+                mix.state->duck = DuckState{};
             }
+            MixBlock(acc, frames, mix.sources.size(), scratch_.data(), kMaxFrames * 2,
+                mix.sources.data(), mix.targets.data(), mix.routes.data(), mix.roles.data(),
+                mix.current.get(), mix.gain, busRate_, mix.duck ? &mix.state->duck : nullptr);
             // ~100 ms release. The split layout limits each side on its own.
             MixState& state = *mix.state;
             const float release = 1.0f - std::exp(-1.0f / (0.1f * float(busRate_)));
