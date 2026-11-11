@@ -57,7 +57,7 @@ The other folders in `spikes/` hold the measurement scripts behind [the measurem
 tools/release.sh
 ```
 
-It builds a Release configuration, runs the tests, and writes `build/release/Blend-VERSION.dmg`. Without a Developer ID the image is signed ad hoc, and people opening it need to approve it in System Settings once.
+It builds a Release configuration, runs the tests, and writes `build/release/Blend-VERSION.dmg` and `build/release/Blend.dmg`, a byte-identical copy that gives every release the same download link, `https://github.com/spashii/blend/releases/latest/download/Blend.dmg`. Without a Developer ID the image is signed ad hoc, and people opening it need to approve it in System Settings once.
 
 To sign and notarize, set up a Developer ID once per Mac:
 
@@ -78,6 +78,6 @@ With the key in place, a notarized build also adds the release to the update fee
 tools/release.sh --publish
 ```
 
-It builds and notarizes, uploads the image as GitHub release `vVERSION`, then commits and pushes the feed and the cask, in that order so no copy of Blend is offered an update that isn't there yet. It needs `gh` logged in.
+It builds and notarizes, uploads both images and the checksum as GitHub release `vVERSION`, then commits and pushes the feed and the cask, in that order so no copy of Blend is offered an update that isn't there yet. It needs `gh` logged in. Over SSH, `gh` can't read the Mac's keychain: build there, copy `Blend-VERSION.dmg`, `Blend.dmg` and `Blend-VERSION.dmg.sha256` to a machine where `gh` is logged in, run `gh release create vVERSION` with all three, then commit and push the updated `site/appcast.xml` and `Casks/blend.rb`.
 
 The website is `site/`, published to GitHub Pages by `.github/workflows/pages.yml` when it changes on main.

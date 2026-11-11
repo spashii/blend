@@ -1,7 +1,8 @@
 #!/bin/zsh
 # Builds the release disk image: tools/release.sh [--publish]
 #
-# Output: build/release/Blend-VERSION.dmg with Blend.app, which carries the driver.
+# Output: build/release/Blend-VERSION.dmg with Blend.app, which carries the driver, and
+# Blend.dmg, a byte-identical copy that is uploaded beside it.
 # --publish then uploads it as GitHub release vVERSION and pushes the update feed and the
 # Homebrew cask that point at it; it needs a clean, pushed checkout and gh logged in.
 # With tools/release-identity.sh set up, it signs with that Developer ID, then notarizes and
@@ -116,6 +117,9 @@ if [[ -n $profile ]]; then
   spctl --assess --type open --context context:primary-signature -v $dmg
 fi
 (cd $out && shasum -a 256 ${dmg:t} | tee ${dmg:t}.sha256)
+# The unversioned copy makes releases/latest/download/Blend.dmg a stable link. It is the
+# same bytes, so the checksum and the notarization ticket hold for both.
+cp -f $dmg $out/Blend.dmg
 
 # A notarized image becomes the newest entry in the update feed and the Homebrew cask. Both
 # are files in the repo, published by committing them with the GitHub release.
@@ -145,7 +149,7 @@ if $publish; then
     exit 1
   }
   # The image goes up before the feed that offers it.
-  gh release create v$version $dmg $dmg.sha256 --target $(git rev-parse HEAD) \
+  gh release create v$version $dmg $out/Blend.dmg $dmg.sha256 --target $(git rev-parse HEAD) \
     --title "Blend Mic $version" --generate-notes
   git commit -q -m "Blend $version" site/appcast.xml Casks/blend.rb
   git push -q
