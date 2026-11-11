@@ -183,7 +183,7 @@ private struct MixEditor: View {
                         .foregroundStyle(.secondary)
                 }
             } footer: {
-                Text("Pick \"\(mix.name)\" as the microphone in any app.")
+                Text("Pick \"\(mix.deviceName)\" as the microphone in any app.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
