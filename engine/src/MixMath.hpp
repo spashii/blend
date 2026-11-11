@@ -75,12 +75,12 @@ struct DuckState
 // RMS of interleaved stereo folded to mono.
 inline float BlockRms(const float* stereo, uint32_t frames)
 {
-    double sum = 0;
+    float sum = 0;
     for (uint32_t i = 0; i < frames; i++) {
-        const double m = 0.5 * (double(stereo[i * 2]) + double(stereo[i * 2 + 1]));
+        const float m = 0.5f * (stereo[i * 2] + stereo[i * 2 + 1]);
         sum += m * m;
     }
-    return frames ? float(std::sqrt(sum / double(frames))) : 0.0f;
+    return frames ? std::sqrt(sum / float(frames)) : 0.0f;
 }
 
 // Advances the duck by one block and returns the linear gain the ducked sources should
