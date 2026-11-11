@@ -51,10 +51,14 @@ inline void AddSource(float* acc, const float* src, uint32_t frames, float from,
 // call or the music steps back for the voice.
 //
 // The level that keys it is the microphone's after echo cancellation and voice isolation,
-// before its own gain, so the slider does not move the threshold. 0.01 (-40 dBFS) RMS sits above
-// what those leave of a quiet room and below ordinary speech, so breathing and keyboard
-// noise do not duck and a soft voice does.
-constexpr float kDuckThreshold = 0.01f; // -40 dBFS
+// before its own gain, so the slider does not move the threshold. 0.01 (-40 dBFS) RMS per
+// 256-frame block keys on 96% of the time a person is talking, measured on dictations from
+// a MacBook Air's built-in microphone (docs/internals/measurements.md), and above the
+// room noise floor of 172 of 176 of those recordings. The level must also stay up for the
+// key time before the duck starts, so a keystroke or one block of echo residue does not
+// duck.
+constexpr float kDuckThreshold = 0.01f;
+constexpr float kDuckKeyTime = 0.010f; // seconds above the threshold before the attack
 constexpr float kDuckDepthDb = -12.0f;
 constexpr float kDuckAttack = 0.010f;  // seconds to reach the full depth
 constexpr float kDuckHold = 0.300f;    // seconds the depth stays after the voice stops
@@ -70,6 +74,7 @@ struct DuckState
 {
     float db = 0;   // current reduction, 0 down to kDuckDepthDb
     float hold = 0; // seconds of hold left
+    float above = 0; // seconds the level has been above the threshold without a break
 };
 
 // RMS of interleaved stereo folded to mono.
@@ -89,8 +94,8 @@ inline float BlockRms(const float* stereo, uint32_t frames)
 inline float DuckStep(float level, uint32_t frames, double rate, DuckState& state)
 {
     const float seconds = float(double(frames) / rate);
-    const bool talking = level >= kDuckThreshold;
-    if (talking) {
+    state.above = level >= kDuckThreshold ? state.above + seconds : 0.0f;
+    if (state.above >= kDuckKeyTime) {
         state.hold = kDuckHold;
         state.db = std::max(kDuckDepthDb, state.db + kDuckDepthDb / kDuckAttack * seconds);
     } else {

@@ -279,6 +279,8 @@ struct DuckRun
 constexpr uint32_t kBlock = 256;
 constexpr double kRate = 48000;
 constexpr float kMusic = 0.2f;
+// Block 188, so a test signal starts on a block boundary the way the arithmetic assumes.
+constexpr double kOn = 188.0 * kBlock / kRate;
 
 // `micLevel(t)` gives the microphone's amplitude (a 1 kHz sine) at time t seconds.
 template <class Level>
@@ -329,13 +331,16 @@ double Dbfs(double amplitude)
 void TestDuckAttackHoldRelease()
 {
     // The voice is on from 1.0 s to 2.0 s, at -20 dBFS peak.
-    auto voice = [](double t) { return t >= 1.0 && t < 2.0 ? 0.1 : 0.0; };
+    auto voice = [](double t) { return t >= kOn && t < 2.0 ? 0.1 : 0.0; };
     const DuckRun run = RunDuck(4.0, voice, true);
     CHECK(std::fabs(DbAt(run, 0.9)) < 0.01, "untouched before the voice: %.2f dB", DbAt(run, 0.9));
-    CHECK(std::fabs(DbAt(run, 1.0 + 0.012) + 12) < 0.5, "full depth within the attack: %.2f dB",
-        DbAt(run, 1.012));
-    CHECK(DbAt(run, 1.0 + 0.003) > -12 + 1, "attack is a ramp, not a step: %.2f dB",
-        DbAt(run, 1.003));
+    // The duck starts once two blocks (10.7 ms) are above the threshold, then attacks over 10 ms.
+    CHECK(std::fabs(DbAt(run, kOn + 0.005)) < 0.01, "nothing in the first block: %.2f dB",
+        DbAt(run, kOn + 0.005));
+    CHECK(std::fabs(DbAt(run, kOn + 0.0107 + 0.012) + 12) < 0.5,
+        "full depth within the attack: %.2f dB", DbAt(run, kOn + 0.0227));
+    CHECK(DbAt(run, kOn + 0.0107 + 0.003) > -12 + 1, "attack is a ramp, not a step: %.2f dB",
+        DbAt(run, kOn + 0.0137));
     CHECK(std::fabs(DbAt(run, 1.9) + 12) < 0.5, "held while talking: %.2f dB", DbAt(run, 1.9));
     CHECK(std::fabs(DbAt(run, 2.0 + 0.28) + 12) < 0.5, "held 280 ms after the voice: %.2f dB",
         DbAt(run, 2.28));
@@ -351,9 +356,28 @@ void TestDuckAttackHoldRelease()
     }
 }
 
+void TestDuckIgnoresShortBursts()
+{
+    // A keystroke or a block of echo residue: loud, but under the key time.
+    auto click = [](double t) { return t >= kOn && t < kOn + 256.0 / kRate ? 0.5 : 0.0; };
+    const DuckRun one = RunDuck(2.0, click, true);
+    for (double t : {kOn + 0.001, kOn + 0.006, kOn + 0.02, kOn + 0.1, kOn + 0.5}) {
+        CHECK(std::fabs(DbAt(one, t)) < 0.01, "one block does not duck at %.3f s: %.2f dB", t,
+            DbAt(one, t));
+    }
+    auto two = [](double t) { return t >= kOn && t < kOn + 512.0 / kRate ? 0.5 : 0.0; };
+    const DuckRun both = RunDuck(2.0, two, true);
+    CHECK(DbAt(both, kOn + 0.05) < -6, "two blocks do: %.2f dB", DbAt(both, kOn + 0.05));
+    // Short breaks inside speech do not restart the wait once the duck is held.
+    auto gappy = [](double t) { return t >= kOn && t < 2.0 && std::fmod(t, 0.1) > 0.01 ? 0.1 : 0.0; };
+    const DuckRun speech = RunDuck(2.5, gappy, true);
+    CHECK(std::fabs(DbAt(speech, 1.8) + 12) < 0.5, "held through short gaps: %.2f dB",
+        DbAt(speech, 1.8));
+}
+
 void TestDuckHasNoSteps()
 {
-    auto voice = [](double t) { return t >= 1.0 && t < 2.0 ? 0.1 : 0.0; };
+    auto voice = [](double t) { return t >= kOn && t < 2.0 ? 0.1 : 0.0; };
     const DuckRun run = RunDuck(4.0, voice, true);
     float worst = 0;
     for (size_t i = 1; i < run.music.size(); i++) {
@@ -448,6 +472,7 @@ int main()
     TestStereoRouting();
     TestLimiterLinking();
     TestDuckAttackHoldRelease();
+    TestDuckIgnoresShortBursts();
     TestDuckHasNoSteps();
     TestDuckThreshold();
     TestDuckOffIsBitExact();
