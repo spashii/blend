@@ -73,6 +73,9 @@ struct Mix: Codable, Hashable, Identifiable, Sendable {
     /// With exactly two sources: the first on the left channel only, the second on the
     /// right only, so a recorder can tell them apart. Ignored with any other number.
     var split = false
+    /// Lowers every other source while a microphone in the mix is talking. Kept when the mix
+    /// is split, but has no effect there (see `canDuck`).
+    var duck = false
     /// A split ends when the mix stops having two sources, so adding a different second
     /// source later doesn't quietly split it again.
     var sources: [MixSource] = [] {
@@ -83,6 +86,12 @@ struct Mix: Codable, Hashable, Identifiable, Sendable {
 
     var isSplit: Bool {
         split && sources.count == 2
+    }
+
+    /// Ducking needs a microphone to listen to and something else to lower, and a split mix
+    /// is for a recorder that wants every source at full level.
+    var canDuck: Bool {
+        !isSplit && sources.contains { $0.kind == .device } && sources.contains { $0.kind != .device }
     }
 
     /// "MacBook Air Microphone on the left, System audio on the right", for two sources.
@@ -120,6 +129,7 @@ extension Mix {
         gainDb = try c.decodeIfPresent(Double.self, forKey: .gainDb) ?? 0
         muted = try c.decodeIfPresent(Bool.self, forKey: .muted) ?? false
         split = try c.decodeIfPresent(Bool.self, forKey: .split) ?? false
+        duck = try c.decodeIfPresent(Bool.self, forKey: .duck) ?? false
         sources = try c.decodeIfPresent([MixSource].self, forKey: .sources) ?? []
     }
 }

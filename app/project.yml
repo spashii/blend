@@ -123,6 +123,7 @@ targets:
       - path: Blend/StatusPolling.swift
       - path: Blend/InputDevices.swift
       - path: Blend/Model.swift
+      - path: Blend/MixStore.swift
       - path: Blend/Leftovers.swift
       - path: Blend/MoveToApplications.swift
     settings:

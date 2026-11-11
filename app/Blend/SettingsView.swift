@@ -202,6 +202,9 @@ private struct MixEditor: View {
                         Text(mix.splitDescription)
                     }
                 }
+                if mix.canDuck {
+                    Toggle("Lower other sources while I talk", isOn: $mix.duck)
+                }
             }
 
             Section {
