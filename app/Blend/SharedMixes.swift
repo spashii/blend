@@ -13,6 +13,8 @@ final class SharedMixes {
     private struct Entry: Encodable {
         let id: String
         let name: String
+        /// What the mix's microphone is called in other apps' device lists.
+        let deviceName: String
         let deviceUID: String
         let split: Bool
         let sources: [Source]
@@ -44,7 +46,7 @@ final class SharedMixes {
 
     func write(_ mixes: [Mix]) {
         let file = File(mixes: mixes.map { mix in
-            Entry(id: mix.id, name: mix.name, deviceUID: "app.blend.mix." + mix.id,
+            Entry(id: mix.id, name: mix.name, deviceName: mix.deviceName, deviceUID: mix.deviceUID,
                 split: mix.isSplit,
                 sources: mix.sources.enumerated().map { index, source in
                     Source(kind: source.kind.rawValue, name: source.name, uid: source.uid,

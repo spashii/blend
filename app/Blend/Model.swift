@@ -93,6 +93,23 @@ struct Mix: Codable, Hashable, Identifiable, Sendable {
 }
 
 extension Mix {
+    /// Core Audio's UID for the mix's microphone. Apps remember a selected device by it, so it
+    /// never depends on the name.
+    var deviceUID: String { "app.blend.mix." + id }
+
+    /// What other apps list the microphone as. Only the engine's copy of the mix carries it,
+    /// so the driver names the device this way; Blend's own screens keep `name`.
+    var deviceName: String { "Blend Mic (\(name))" }
+
+    /// The mix as the engine and driver should see it.
+    var forEngine: Mix {
+        var copy = self
+        copy.name = deviceName
+        return copy
+    }
+}
+
+extension Mix {
     /// Files written before a field existed decode with its default.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)

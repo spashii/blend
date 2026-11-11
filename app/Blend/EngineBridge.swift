@@ -42,7 +42,7 @@ final class EngineBridge {
         struct Config: Encodable {
             let mixes: [Mix]
         }
-        guard let data = try? encoder.encode(Config(mixes: mixes)),
+        guard let data = try? encoder.encode(Config(mixes: mixes.map(\.forEngine))),
               let json = String(data: data, encoding: .utf8) else {
             return
         }
