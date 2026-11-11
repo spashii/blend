@@ -168,6 +168,12 @@ private struct MixRow: View {
                         .font(.caption)
                         .padding(.leading, 20)
                 }
+                if mix.canDuck {
+                    DuckToggle(mix: mix)
+                        .toggleStyle(.checkbox)
+                        .font(.caption)
+                        .padding(.leading, 20)
+                }
                 if mix.sources.isEmpty {
                     Text("Nothing in this mix yet. Add your mic or an app in Settings.")
                         .font(.caption)
@@ -238,6 +244,20 @@ struct SplitToggle: View {
             model.store.update(updated)
         }))
         .help(mix.splitDescription)
+    }
+}
+
+/// Shown only where ducking can apply: a mic and another source, and not split.
+struct DuckToggle: View {
+    @Environment(AppModel.self) private var model
+    let mix: Mix
+
+    var body: some View {
+        Toggle("Lower other sources while I talk", isOn: Binding(get: { mix.duck }, set: { on in
+            var updated = mix
+            updated.duck = on
+            model.store.update(updated)
+        }))
     }
 }
 
