@@ -27,8 +27,12 @@ struct GeneralView: View {
 
             if setup.driver == .current && setup.driverLoaded && model.store.mixes.isEmpty {
                 Section {
-                    Button("Create Your First Mix…") { model.showingNewMix = true }
-                        .buttonStyle(.borderedProminent)
+                    Button { model.showingNewMix = true } label: {
+                        Text("Create Your First Mix…")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
                 } footer: {
                     Text("A mix is a microphone you put together: choose what goes in, set the volumes, then pick it in Discord, a call recorder or any other app.")
                 }
