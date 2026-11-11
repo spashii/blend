@@ -77,3 +77,11 @@ Run: `spikes/identity/scenario.sh` starts two throwaway Firefox profiles playing
 - Proof: a mix bound to copy A carried 440 Hz at its exact level with every other tone at least 135 dB down; a control mix bound to copy B carried 660 Hz with the others at least 170 dB down; after A was killed and relaunched with the same arguments, the source found it again with the same result.
 - Trap: Firefox restarts a short `<audio loop>` with a phase jump, which smears energy across the spectrum and fails the control at about 52 dB. The test tones are 30 s long and the checker splits at jumps.
 - Not run: the same inventory and proof on a second Mac.
+
+## Ducking
+
+Run: `engine/tests/DspTests.cpp` drives `MixBlock` with a microphone and a constant source in 256-frame blocks at 48 kHz; `engine/tests/DuckBench.cpp` times a three-source mix block plus the limiter with ducking on and off over the same input (the microphone talking half of each second), 20 interleaved runs of 400,000 blocks on an Apple M5.
+
+- The other sources reach -12 dB within 12 ms of the voice starting, hold 300 ms after it stops, and are back at 0 dB 500 ms later. The largest sample step is under 0.001 on a source at 0.2.
+- Ducking adds about 0.2 microseconds to a block that takes about 1.7 microseconds: 0.004% of a 5.33 ms buffer, with run-to-run spread larger than the difference.
+- The -40 dBFS threshold is chosen, not measured on real microphones: it has not been run with a person talking through echo cancellation and voice isolation.
