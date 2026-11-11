@@ -160,6 +160,11 @@ final class AudioCatalog {
         }
     }
 
+    /// A device source whose input is a physical microphone, as against a virtual one.
+    func isMicrophone(_ source: MixSource) -> Bool {
+        source.kind == .device && inputs.contains { $0.uid == source.uid && $0.hardware }
+    }
+
     func nameCopy(bundleID: String, identity: String, _ name: String) {
         let key = "\(bundleID)#\(identity)"
         let trimmed = name.trimmingCharacters(in: .whitespaces)

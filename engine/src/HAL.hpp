@@ -119,4 +119,32 @@ inline UInt32 BufferFrames(AudioObjectID device)
     return frames;
 }
 
+// Whether a device is a physical microphone: built-in, USB, Bluetooth and the like, as
+// against a virtual or aggregate device, or one that does not say. The same rule as
+// InputDevices.isHardware in the app.
+inline bool IsPhysicalInput(AudioObjectID device)
+{
+    UInt32 transport = 0;
+    if (!Get(device, kAudioDevicePropertyTransportType, transport)) {
+        return false;
+    }
+    switch (transport) {
+    case kAudioDeviceTransportTypeBuiltIn:
+    case kAudioDeviceTransportTypeUSB:
+    case kAudioDeviceTransportTypeBluetooth:
+    case kAudioDeviceTransportTypeBluetoothLE:
+    case kAudioDeviceTransportTypeFireWire:
+    case kAudioDeviceTransportTypePCI:
+    case kAudioDeviceTransportTypeThunderbolt:
+    case kAudioDeviceTransportTypeHDMI:
+    case kAudioDeviceTransportTypeDisplayPort:
+    case kAudioDeviceTransportTypeAVB:
+    case kAudioDeviceTransportTypeContinuityCaptureWired:
+    case kAudioDeviceTransportTypeContinuityCaptureWireless:
+        return true;
+    default:
+        return false;
+    }
+}
+
 } // namespace blend::hal

@@ -9,6 +9,7 @@ final class DuckingTests: XCTestCase {
     }
 
     private let mic = MixSource.device(uid: "BuiltInMicrophoneDevice", name: "Microphone")
+    private let blackhole = MixSource.device(uid: "BlackHole2ch_UID", name: "BlackHole 2ch")
     private let call = MixSource(kind: .app, bundleID: "us.zoom.xos", name: "Zoom")
 
     func testOffByDefault() {
@@ -43,24 +44,37 @@ final class DuckingTests: XCTestCase {
         XCTAssertEqual(object?["duck"] as? Bool, true)
     }
 
-    func testOfferedOnlyWithAMicAndSomethingToLower() {
-        XCTAssertTrue(Mix(id: "a", name: "Call", slot: 0, sources: [mic, call]).canDuck)
-        XCTAssertTrue(Mix(id: "a", name: "Call", slot: 0, sources: [mic, call, .system()]).canDuck)
-        XCTAssertFalse(Mix(id: "a", name: "Call", slot: 0, sources: [call, .system()]).canDuck,
-            "no microphone")
-        XCTAssertFalse(Mix(id: "a", name: "Call", slot: 0, sources: [mic]).canDuck,
-            "nothing to lower")
+    /// What the device list says: the built-in microphone is physical, BlackHole is not.
+    private let physical: (MixSource) -> Bool = {
+        $0.kind == .device && $0.uid == "BuiltInMicrophoneDevice"
+    }
+
+    private func canDuck(_ sources: [MixSource]) -> Bool {
+        Mix(id: "a", name: "Call", slot: 0, sources: sources).canDuck(isMicrophone: physical)
+    }
+
+    func testOfferedOnlyWithAPhysicalMicAndSomethingToLower() {
+        XCTAssertTrue(canDuck([mic, call]))
+        XCTAssertTrue(canDuck([mic, call, .system()]))
+        XCTAssertFalse(canDuck([call, .system()]), "no microphone")
+        XCTAssertFalse(canDuck([mic]), "nothing to lower")
+    }
+
+    func testAVirtualInputIsLoweredNotListenedTo() {
+        XCTAssertFalse(canDuck([blackhole, call]), "a virtual input is no microphone")
+        XCTAssertFalse(canDuck([blackhole, .system()]))
+        XCTAssertTrue(canDuck([mic, blackhole]), "the virtual input is what gets lowered")
     }
 
     func testHiddenInSplitMode() {
         var mix = Mix(id: "a", name: "Call", slot: 0, sources: [mic, .system()])
         mix.duck = true
-        XCTAssertTrue(mix.canDuck)
+        XCTAssertTrue(mix.canDuck(isMicrophone: physical))
         mix.split = true
-        XCTAssertFalse(mix.canDuck)
+        XCTAssertFalse(mix.canDuck(isMicrophone: physical))
         // Leaving split brings back the choice that was made before.
         mix.split = false
-        XCTAssertTrue(mix.canDuck)
+        XCTAssertTrue(mix.canDuck(isMicrophone: physical))
         XCTAssertTrue(mix.duck)
     }
 }

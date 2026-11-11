@@ -69,7 +69,7 @@ struct MixConfig
     bool muted = false;
     // Set only when the mix also has exactly two sources.
     bool split = false;
-    // Lower the other sources while a microphone in the mix is talking (MixMath.hpp). Never
+    // Lower the other sources while a physical microphone in the mix is talking (MixMath.hpp). Never
     // set on a split mix, which a recorder wants at full level.
     bool duck = false;
     std::vector<SourceConfig> sources;

@@ -202,7 +202,7 @@ private struct MixEditor: View {
                         Text(mix.splitDescription)
                     }
                 }
-                if mix.canDuck {
+                if mix.canDuck(isMicrophone: model.catalog.isMicrophone) {
                     Toggle("Lower other sources while I talk", isOn: $mix.duck)
                 }
             }
