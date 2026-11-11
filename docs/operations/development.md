@@ -78,6 +78,6 @@ With the key in place, a notarized build also adds the release to the update fee
 tools/release.sh --publish
 ```
 
-It builds and notarizes, uploads both images and the checksum as GitHub release `vVERSION`, then commits and pushes the feed and the cask, in that order so no copy of Blend is offered an update that isn't there yet. It needs `gh` logged in. Over SSH, `gh` can't read the Mac's keychain: build there, copy `Blend-VERSION.dmg`, `Blend.dmg` and `Blend-VERSION.dmg.sha256` to a machine where `gh` is logged in, run `gh release create vVERSION` with all three, then commit and push the updated `site/appcast.xml` and `Casks/blend.rb`.
+It builds and notarizes, uploads both images and the checksum as GitHub release `vVERSION`, then commits and pushes the feed and the cask, in that order so no copy of Blend is offered an update that isn't there yet. It needs `gh` logged in. Over SSH, `gh` can't read the Mac's keychain: build there, copy `Blend-VERSION.dmg`, `Blend.dmg` and `Blend-VERSION.dmg.sha256` to a machine where `gh` is logged in, run `gh release create vVERSION --target <full commit SHA>` with all three (a short SHA is rejected), check the release exists, and only then commit and push the updated `site/appcast.xml` and `Casks/blend.rb`.
 
 The website is `site/`, published to GitHub Pages by `.github/workflows/pages.yml` when it changes on main.
