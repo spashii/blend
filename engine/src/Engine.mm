@@ -453,8 +453,11 @@ void Engine::PublishGraph()
                     : position == 0             ? Route::Left
                                                 : Route::Right);
             plan.targets.push_back(source.muted ? 0 : DbToGain(source.gainDb));
-            plan.roles.push_back(source.kind == SourceConfig::Kind::Device ? Role::Key
-                                                                            : Role::Ducked);
+            // Only a physical microphone keys the duck. A virtual input such as BlackHole
+            // carries another app's audio and is lowered like any other source.
+            const bool microphone = source.kind == SourceConfig::Kind::Device
+                && hal::IsPhysicalInput(hal::DeviceForUID(source.uid));
+            plan.roles.push_back(microphone ? Role::Key : Role::Ducked);
         }
         plan.duck = mix.duck
             && std::count(plan.roles.begin(), plan.roles.end(), Role::Key) > 0

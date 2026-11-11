@@ -168,7 +168,7 @@ private struct MixRow: View {
                         .font(.caption)
                         .padding(.leading, 20)
                 }
-                if mix.canDuck {
+                if mix.canDuck(isMicrophone: model.catalog.isMicrophone) {
                     DuckToggle(mix: mix)
                         .toggleStyle(.checkbox)
                         .font(.caption)
@@ -247,7 +247,7 @@ struct SplitToggle: View {
     }
 }
 
-/// Shown only where ducking can apply: a mic and another source, and not split.
+/// Shown only where ducking can apply: a physical mic and another source, and not split.
 struct DuckToggle: View {
     @Environment(AppModel.self) private var model
     let mix: Mix

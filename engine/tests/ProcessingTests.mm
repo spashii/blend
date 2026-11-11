@@ -3,6 +3,7 @@
 // leave a voice alone when nothing plays, and voice isolation has to remove steady noise.
 // macOS only, since it runs WebRTC and Apple's isolation unit for real.
 
+#include "../src/HAL.hpp"
 #include "../src/MicProcessor.hpp"
 
 #include <cmath>
@@ -138,6 +139,15 @@ int main()
         const double removed = TailDb(hiss, 3) - TailDb(isolated, 3);
         Check(removed >= 10, "voice isolation removes at least 10 dB of noise", removed);
     }
+
+    // Only physical inputs key ducking. The built-in microphone is one; a device that does
+    // not exist, as BlackHole does not on a Mac without it, is not.
+    const auto builtIn = blend::hal::DeviceForUID("BuiltInMicrophoneDevice");
+    if (builtIn != kAudioObjectUnknown) {
+        Check(blend::hal::IsPhysicalInput(builtIn), "the built-in microphone is physical", 0);
+    }
+    Check(!blend::hal::IsPhysicalInput(blend::hal::DeviceForUID("no-such-device")),
+        "an unknown device is not physical", 0);
 
     std::printf(failures ? "%d FAILED\n" : "all passed\n", failures);
     return failures ? 1 : 0;

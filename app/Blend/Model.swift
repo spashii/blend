@@ -88,10 +88,13 @@ struct Mix: Codable, Hashable, Identifiable, Sendable {
         split && sources.count == 2
     }
 
-    /// Ducking needs a microphone to listen to and something else to lower, and a split mix
-    /// is for a recorder that wants every source at full level.
-    var canDuck: Bool {
-        !isSplit && sources.contains { $0.kind == .device } && sources.contains { $0.kind != .device }
+    /// Ducking needs a physical microphone to listen to and something else to lower, and a
+    /// split mix is for a recorder that wants every source at full level. `isMicrophone`
+    /// says whether a device source is a physical microphone, which only the device list knows.
+    func canDuck(isMicrophone: (MixSource) -> Bool) -> Bool {
+        guard !isSplit else { return false }
+        let microphones = sources.filter { $0.kind == .device && isMicrophone($0) }
+        return !microphones.isEmpty && microphones.count < sources.count
     }
 
     /// "MacBook Air Microphone on the left, System audio on the right", for two sources.
