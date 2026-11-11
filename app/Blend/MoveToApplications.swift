@@ -53,24 +53,70 @@ enum MoveToApplications {
         case alreadyRunning
         /// The person dismissed the administrator prompt.
         case cancelled
+        /// EACCES or EPERM: the only failure that administrator rights can fix.
+        case permissionDenied
         case failed(String)
+    }
+
+    enum Outcome: Equatable {
+        case moved(URL)
+        /// The copy in Applications is the same version or newer, so it stays.
+        case keptInstalled(URL)
+    }
+
+    /// Versions compare numerically, part by part: 0.10.0 is newer than 0.9.0. A part that
+    /// isn't a number counts as 0, and a missing part as 0.
+    static func isNewer(_ version: String, than other: String) -> Bool {
+        func parts(_ text: String) -> [Int] {
+            text.split(separator: ".").map { Int($0.prefix { $0.isNumber }) ?? 0 }
+        }
+        var a = parts(version), b = parts(other)
+        let length = max(a.count, b.count)
+        a += Array(repeating: 0, count: length - a.count)
+        b += Array(repeating: 0, count: length - b.count)
+        return a.lexicographicallyPrecedes(b) ? false : a != b
+    }
+
+    static func bundleVersion(of app: URL) -> String? {
+        Bundle(url: app)?.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+    }
+
+    static func isPermissionError(_ error: Error) -> Bool {
+        if case MoveError.permissionDenied = error { return true }
+        let ns = error as NSError
+        if ns.domain == NSPOSIXErrorDomain {
+            return ns.code == Int(EACCES) || ns.code == Int(EPERM)
+        }
+        if ns.domain == NSCocoaErrorDomain, ns.code == NSFileWriteNoPermissionError {
+            return true
+        }
+        if let underlying = ns.userInfo[NSUnderlyingErrorKey] as? NSError {
+            return isPermissionError(underlying)
+        }
+        return false
     }
 
     /// Copies `source` to `applications`/Blend.app and returns the copy. The copy is made beside
     /// its destination and swapped in, so an older Blend stays if anything fails. The
     /// quarantine attribute comes off the copy only; the original is left as it was found.
-    /// `elevated` runs the same steps as root after the system's administrator prompt.
+    /// `elevated` runs the same steps as root after the system's administrator prompt, and
+    /// only when the first attempt failed for lack of permission. A copy in Applications that
+    /// is the same version or newer is never replaced, so an old disk image can't downgrade it.
     static func move(
         _ source: URL,
         into applications: URL = URL(fileURLWithPath: "/Applications"),
         isRunning: (URL) -> Bool,
         elevated: (_ source: URL, _ staging: URL, _ destination: URL) throws -> Void = runElevated
-    ) throws -> URL {
+    ) throws -> Outcome {
         let files = FileManager.default
         let destination = applications.appendingPathComponent("Blend.app")
         let staging = applications.appendingPathComponent(".Blend.app.moving")
         if files.fileExists(atPath: destination.path), isRunning(destination) {
             throw MoveError.alreadyRunning
+        }
+        if let installed = bundleVersion(of: destination), let mine = bundleVersion(of: source),
+           !isNewer(mine, than: installed) {
+            return .keptInstalled(destination)
         }
         try? files.removeItem(at: staging)
         do {
@@ -83,6 +129,9 @@ enum MoveToApplications {
             }
         } catch {
             try? files.removeItem(at: staging)
+            guard isPermissionError(error) else {
+                throw error as? MoveError ?? MoveError.failed(error.localizedDescription)
+            }
             do {
                 try elevated(source, staging, destination)
             } catch let error as MoveError {
@@ -91,7 +140,7 @@ enum MoveToApplications {
                 throw MoveError.failed(error.localizedDescription)
             }
         }
-        return destination
+        return .moved(destination)
     }
 
     private static func run(_ tool: String, _ arguments: [String]) throws {
@@ -103,8 +152,11 @@ enum MoveToApplications {
         try process.run()
         process.waitUntilExit()
         guard process.terminationStatus == 0 else {
-            let text = String(data: errors.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
-            throw MoveError.failed(text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? tool)
+            let text = String(data: errors.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            if text.contains("Permission denied") || text.contains("Operation not permitted") {
+                throw MoveError.permissionDenied
+            }
+            throw MoveError.failed(text.trimmingCharacters(in: .whitespacesAndNewlines))
         }
     }
 
@@ -117,10 +169,11 @@ enum MoveToApplications {
     private static func runElevated(source: URL, staging: URL, destination: URL) throws {
         let source = shellQuote(source.path), staging = shellQuote(staging.path)
         let destination = shellQuote(destination.path)
-        let command = "rm -rf \(staging) && /usr/bin/ditto \(source) \(staging)"
+        let command = "{ rm -rf \(staging) && /usr/bin/ditto \(source) \(staging)"
             + " && /usr/bin/xattr -dr com.apple.quarantine \(staging)"
             + " && chown -R \(getuid()):\(getgid()) \(staging)"
-            + " && rm -rf \(destination) && mv \(staging) \(destination)"
+            + " && rm -rf \(destination) && mv \(staging) \(destination); }"
+            + " || { rm -rf \(staging); exit 1; }"
         let script = "do shell script \"\(command.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\""))\" with administrator privileges"
         var error: NSDictionary?
         NSAppleScript(source: script)?.executeAndReturnError(&error)
@@ -169,32 +222,63 @@ enum MoveToApplications {
             return
         }
 
-        let ownID = Bundle.main.bundleIdentifier
         do {
-            let copy = try move(bundle, isRunning: { destination in
-                NSRunningApplication.runningApplications(withBundleIdentifier: ownID ?? "")
-                    .contains { $0.bundleURL?.standardizedFileURL == destination.standardizedFileURL }
-            })
-            if trashOriginal {
-                try? FileManager.default.trashItem(at: URL(fileURLWithPath: original), resultingItemURL: nil)
+            switch try move(bundle, isRunning: { destination in
+                otherInstances().contains { $0.bundleURL?.standardizedFileURL == destination.standardizedFileURL }
+            }) {
+            case .moved(let copy):
+                if trashOriginal {
+                    try? FileManager.default.trashItem(at: URL(fileURLWithPath: original), resultingItemURL: nil)
+                }
+                relaunch(copy)
+            case .keptInstalled(let installed):
+                relaunch(installed)
             }
-            relaunch(copy)
             exit(0)
         } catch MoveError.alreadyRunning {
-            let note = NSAlert()
-            note.messageText = "Blend Mic is already open from Applications"
-            note.informativeText = "Quit it from its menu, then open this copy again to replace it."
-            note.runModal()
-            exit(0)
+            explainAlreadyOpen()
         } catch MoveError.cancelled {
             return
         } catch {
             let note = NSAlert()
             note.alertStyle = .warning
             note.messageText = "Blend Mic couldn't move itself"
-            note.informativeText = "\(error)"
+            note.informativeText = "You can drag Blend Mic into Applications yourself."
             note.runModal()
         }
+    }
+
+    private static func otherInstances() -> [NSRunningApplication] {
+        guard let id = Bundle.main.bundleIdentifier else { return [] }
+        let own = ProcessInfo.processInfo.processIdentifier
+        return NSRunningApplication.runningApplications(withBundleIdentifier: id)
+            .filter { $0.processIdentifier != own && !$0.isTerminated }
+    }
+
+    private static func explainAlreadyOpen() {
+        let note = NSAlert()
+        note.messageText = "Blend Mic is already open"
+        note.informativeText = "Quit it from its menu bar icon, then open this copy again."
+        NSApplication.shared.activate()
+        note.runModal()
+        exit(0)
+    }
+
+    /// Two copies would both drive the same audio devices, so a second one explains and
+    /// quits, wherever the first runs from. A copy that is still exiting, as after an update,
+    /// gets a few seconds. Debug builds are exempt so development can run beside an install.
+    @MainActor
+    static func yieldToRunningCopy() {
+        #if DEBUG
+        return
+        #else
+        for _ in 0..<30 where !otherInstances().isEmpty {
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        if !otherInstances().isEmpty {
+            explainAlreadyOpen()
+        }
+        #endif
     }
 
     /// Opens the copy once this process has exited, so two Blends never run at once.

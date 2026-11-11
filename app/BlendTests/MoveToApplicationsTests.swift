@@ -72,8 +72,9 @@ final class MoveToApplicationsTests: XCTestCase {
         let value = "0083;00000000;Safari;"
         XCTAssertEqual(setxattr(source.path, "com.apple.quarantine", value, value.utf8.count, 0, 0), 0)
 
-        let copy = try MoveToApplications.move(source, into: applications, isRunning: { _ in false },
+        let outcome = try MoveToApplications.move(source, into: applications, isRunning: { _ in false },
             elevated: { _, _, _ in XCTFail("no administrator rights needed") })
+        guard case .moved(let copy) = outcome else { return XCTFail("\(outcome)") }
 
         XCTAssertEqual(copy, applications.appending(path: "Blend.app"))
         XCTAssertEqual(try String(contentsOf: copy.appending(path: "Contents/marker"), encoding: .utf8), "new")
@@ -89,7 +90,8 @@ final class MoveToApplicationsTests: XCTestCase {
         _ = try makeApp(at: applications, contents: "old")
         let source = try makeApp(at: root.appending(path: "Volume"), contents: "new")
 
-        let copy = try MoveToApplications.move(source, into: applications, isRunning: { _ in false })
+        let outcome = try MoveToApplications.move(source, into: applications, isRunning: { _ in false })
+        guard case .moved(let copy) = outcome else { return XCTFail("\(outcome)") }
         XCTAssertEqual(try String(contentsOf: copy.appending(path: "Contents/marker"), encoding: .utf8), "new")
     }
 
@@ -120,5 +122,77 @@ final class MoveToApplicationsTests: XCTestCase {
         _ = try MoveToApplications.move(source, into: applications, isRunning: { _ in false },
             elevated: { _, _, _ in asked = true })
         XCTAssertTrue(asked)
+    }
+
+    // MARK: Versions
+
+    private func setVersion(_ version: String, of app: URL) throws {
+        let plist: [String: Any] = ["CFBundleIdentifier": "app.blend.Blend", "CFBundleVersion": version]
+        try (plist as NSDictionary).write(to: app.appending(path: "Contents/Info.plist"))
+    }
+
+    func testVersionsCompareNumerically() {
+        XCTAssertTrue(MoveToApplications.isNewer("0.10.0", than: "0.9.0"))
+        XCTAssertTrue(MoveToApplications.isNewer("0.7.0", than: "0.6.4"))
+        XCTAssertTrue(MoveToApplications.isNewer("1.0", than: "0.9.9"))
+        XCTAssertFalse(MoveToApplications.isNewer("0.7.0", than: "0.7.0"))
+        XCTAssertFalse(MoveToApplications.isNewer("0.7", than: "0.7.0"))
+        XCTAssertFalse(MoveToApplications.isNewer("0.6.4", than: "0.7.0"))
+        XCTAssertFalse(MoveToApplications.isNewer("0.9.0", than: "0.10.0"))
+    }
+
+    func testNeverDowngradesOrReplacesTheSameVersion() throws {
+        for installed in ["0.7.0", "0.8.0"] {
+            let root = FileManager.default.temporaryDirectory.appending(path: "MoveTests-\(UUID().uuidString)")
+            defer { try? FileManager.default.removeItem(at: root) }
+            let applications = root.appending(path: "Applications")
+            let old = try makeApp(at: applications, contents: "installed")
+            try setVersion(installed, of: old)
+            let source = try makeApp(at: root.appending(path: "Volume"), contents: "disk image")
+            try setVersion("0.7.0", of: source)
+
+            let outcome = try MoveToApplications.move(source, into: applications, isRunning: { _ in false },
+                elevated: { _, _, _ in XCTFail("nothing to do as administrator") })
+            XCTAssertEqual(outcome, .keptInstalled(old))
+            XCTAssertEqual(try String(contentsOf: old.appending(path: "Contents/marker"), encoding: .utf8), "installed")
+        }
+    }
+
+    func testReplacesAnOlderVersion() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "MoveTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let applications = root.appending(path: "Applications")
+        let old = try makeApp(at: applications, contents: "installed")
+        try setVersion("0.6.4", of: old)
+        let source = try makeApp(at: root.appending(path: "Volume"), contents: "disk image")
+        try setVersion("0.7.0", of: source)
+
+        let outcome = try MoveToApplications.move(source, into: applications, isRunning: { _ in false })
+        XCTAssertEqual(outcome, .moved(old))
+        XCTAssertEqual(try String(contentsOf: old.appending(path: "Contents/marker"), encoding: .utf8), "disk image")
+    }
+
+    // MARK: Administrator rights
+
+    func testOnlyPermissionErrorsAskForAdministratorRights() {
+        XCTAssertTrue(MoveToApplications.isPermissionError(MoveToApplications.MoveError.permissionDenied))
+        XCTAssertTrue(MoveToApplications.isPermissionError(POSIXError(.EACCES)))
+        XCTAssertTrue(MoveToApplications.isPermissionError(POSIXError(.EPERM)))
+        XCTAssertTrue(MoveToApplications.isPermissionError(CocoaError(.fileWriteNoPermission)))
+        XCTAssertFalse(MoveToApplications.isPermissionError(POSIXError(.ENOSPC)))
+        XCTAssertFalse(MoveToApplications.isPermissionError(CocoaError(.fileWriteOutOfSpace)))
+        XCTAssertFalse(MoveToApplications.isPermissionError(MoveToApplications.MoveError.failed("No space left")))
+    }
+
+    func testAnotherFailureDoesNotAskForAdministratorRights() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "MoveTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let applications = root.appending(path: "Applications")
+        try FileManager.default.createDirectory(at: applications, withIntermediateDirectories: true)
+        let missingSource = root.appending(path: "Nowhere/Blend.app")
+        XCTAssertThrowsError(try MoveToApplications.move(missingSource, into: applications, isRunning: { _ in false },
+            elevated: { _, _, _ in XCTFail("not a permission problem") })) {
+            guard case .failed = $0 as? MoveToApplications.MoveError else { return XCTFail("\($0)") }
+        }
     }
 }

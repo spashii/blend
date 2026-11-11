@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     override init() {
         // Before the model, which starts talking to the driver.
+        MoveToApplications.yieldToRunningCopy()
         MoveToApplications.offerIfNeeded()
         model = AppModel()
         super.init()
