@@ -27,7 +27,14 @@ struct BlendApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let model = AppModel()
+    let model: AppModel
+
+    override init() {
+        // Before the model, which starts talking to the driver.
+        MoveToApplications.offerIfNeeded()
+        model = AppModel()
+        super.init()
+    }
 
     /// Quitting silences every mix, so Blend says which apps would lose sound first. A quit
     /// from logging out or shutting down goes ahead without asking.
