@@ -56,6 +56,9 @@ target_link_libraries(BlendEngine
 add_executable(BlendDspTests tests/DspTests.cpp)
 add_test(NAME dsp COMMAND BlendDspTests)
 
+# Not a test: CPU of a mix block with ducking on and off, run by hand.
+add_executable(BlendDuckBench tests/DuckBench.cpp)
+
 add_executable(BlendConfigTests tests/ConfigTests.cpp src/Config.cpp)
 target_include_directories(BlendConfigTests PRIVATE src)
 target_link_libraries(BlendConfigTests PRIVATE nlohmann_json::nlohmann_json)
