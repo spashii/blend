@@ -371,7 +371,7 @@ void TestDuckThreshold()
     const DuckRun high = RunDuck(1.0, soft, true);
     CHECK(std::fabs(DbAt(low, 0.9)) < 0.01, "room noise does not duck: %.2f dB", DbAt(low, 0.9));
     CHECK(std::fabs(DbAt(high, 0.9) + 12) < 0.5, "a soft voice ducks: %.2f dB", DbAt(high, 0.9));
-    CHECK(Dbfs(0.05 / std::sqrt(2.0)) > blend::kDuckThresholdDb, "test voice is above");
+    CHECK(Dbfs(0.05 / std::sqrt(2.0)) > Dbfs(blend::kDuckThreshold), "test voice is above");
     // A muted microphone is not talking.
     const DuckRun muted = RunDuck(1.0, soft, true, 0.0f);
     CHECK(std::fabs(DbAt(muted, 0.9)) < 0.01, "a muted mic does not duck: %.2f dB",

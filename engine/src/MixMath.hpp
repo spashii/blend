@@ -51,10 +51,10 @@ inline void AddSource(float* acc, const float* src, uint32_t frames, float from,
 // call or the music steps back for the voice.
 //
 // The level that keys it is the microphone's after echo cancellation and voice isolation,
-// before its own gain, so the slider does not move the threshold. -40 dBFS RMS sits above
+// before its own gain, so the slider does not move the threshold. 0.01 (-40 dBFS) RMS sits above
 // what those leave of a quiet room and below ordinary speech, so breathing and keyboard
 // noise do not duck and a soft voice does.
-constexpr float kDuckThresholdDb = -40.0f;
+constexpr float kDuckThreshold = 0.01f; // -40 dBFS
 constexpr float kDuckDepthDb = -12.0f;
 constexpr float kDuckAttack = 0.010f;  // seconds to reach the full depth
 constexpr float kDuckHold = 0.300f;    // seconds the depth stays after the voice stops
@@ -89,7 +89,7 @@ inline float BlockRms(const float* stereo, uint32_t frames)
 inline float DuckStep(float level, uint32_t frames, double rate, DuckState& state)
 {
     const float seconds = float(double(frames) / rate);
-    const bool talking = level >= std::pow(10.0f, kDuckThresholdDb / 20.0f);
+    const bool talking = level >= kDuckThreshold;
     if (talking) {
         state.hold = kDuckHold;
         state.db = std::max(kDuckDepthDb, state.db + kDuckDepthDb / kDuckAttack * seconds);
