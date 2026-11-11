@@ -153,7 +153,8 @@ final class MoveToApplicationsTests: XCTestCase {
 
             let outcome = try MoveToApplications.move(source, into: applications, isRunning: { _ in false },
                 elevated: { _, _, _ in XCTFail("nothing to do as administrator") })
-            XCTAssertEqual(outcome, .keptInstalled(old))
+            guard case .keptInstalled(let kept) = outcome else { return XCTFail("\(outcome)") }
+            XCTAssertEqual(kept.standardizedFileURL.path, old.standardizedFileURL.path)
             XCTAssertEqual(try String(contentsOf: old.appending(path: "Contents/marker"), encoding: .utf8), "installed")
         }
     }
@@ -168,7 +169,8 @@ final class MoveToApplicationsTests: XCTestCase {
         try setVersion("0.7.0", of: source)
 
         let outcome = try MoveToApplications.move(source, into: applications, isRunning: { _ in false })
-        XCTAssertEqual(outcome, .moved(old))
+        guard case .moved(let moved) = outcome else { return XCTFail("\(outcome)") }
+        XCTAssertEqual(moved.standardizedFileURL.path, old.standardizedFileURL.path)
         XCTAssertEqual(try String(contentsOf: old.appending(path: "Contents/marker"), encoding: .utf8), "disk image")
     }
 
