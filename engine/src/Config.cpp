@@ -57,6 +57,7 @@ bool ParseConfig(const std::string& text, Config& config, std::string& error)
                 mix.sources.push_back(std::move(source));
             }
             mix.split = m.value("split", false) && mix.sources.size() == 2;
+            mix.duck = m.value("duck", false) && !mix.split;
             parsed.mixes.push_back(std::move(mix));
         }
         config = std::move(parsed);

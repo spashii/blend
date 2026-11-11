@@ -5,9 +5,12 @@
 #include "../src/Resampler.hpp"
 #include "../src/SourceReader.hpp"
 
+#include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <vector>
 
 namespace {
@@ -263,6 +266,168 @@ void TestLimiterLinking()
     CHECK(linked < untouched - 6, "linked left pulled down: %.2f dB", linked);
 }
 
+
+// Ducking, driven through MixBlock the way the bus thread calls it: 256-frame blocks at
+// 48 kHz, a microphone and a constant "music" source. The music source is constant (DC) so
+// that any step in the output is a step in the gain.
+struct DuckRun
+{
+    std::vector<float> music;    // the music's contribution to the mix, mono
+    std::vector<float> micGain;  // the mic entry's ramped gain at the end of each block
+};
+
+constexpr uint32_t kBlock = 256;
+constexpr double kRate = 48000;
+constexpr float kMusic = 0.2f;
+
+// `micLevel(t)` gives the microphone's amplitude (a 1 kHz sine) at time t seconds.
+template <class Level>
+DuckRun RunDuck(double seconds, Level micLevel, bool duck, float micTarget = 1.0f)
+{
+    const size_t blocks = size_t(seconds * kRate / kBlock);
+    std::vector<float> sources(2 * kBlock * 2);
+    const uint32_t index[] = {0, 1};
+    const float targets[] = {micTarget, 1.0f};
+    const blend::Route routes[] = {blend::Route::Both, blend::Route::Both};
+    const blend::Role roles[] = {blend::Role::Key, blend::Role::Ducked};
+    std::atomic<float> current[2];
+    current[0] = micTarget;
+    current[1] = 1.0f;
+    blend::DuckState state;
+    DuckRun run;
+    for (size_t b = 0; b < blocks; b++) {
+        for (uint32_t i = 0; i < kBlock; i++) {
+            const double t = double(b * kBlock + i) / kRate;
+            const float mic = float(micLevel(t) * std::sin(2 * M_PI * 1000 * t));
+            sources[i * 2] = sources[i * 2 + 1] = mic;
+            sources[kBlock * 2 + i * 2] = sources[kBlock * 2 + i * 2 + 1] = kMusic;
+        }
+        std::vector<float> acc(kBlock * 2, 0.0f);
+        blend::MixBlock(acc.data(), kBlock, 2, sources.data(), kBlock * 2, index, targets,
+            routes, roles, current, 1.0f, kRate, duck ? &state : nullptr);
+        std::vector<float> micOnly(kBlock * 2, 0.0f);
+        blend::AddSource(micOnly.data(), sources.data(), kBlock, micTarget, micTarget, 1.0f,
+            blend::Route::Both);
+        for (uint32_t i = 0; i < kBlock; i++) {
+            run.music.push_back(acc[i * 2] - micOnly[i * 2]);
+        }
+        run.micGain.push_back(current[0].load());
+    }
+    return run;
+}
+
+double DbAt(const DuckRun& run, double t)
+{
+    return 20 * std::log10(std::fabs(run.music[size_t(t * kRate)]) / kMusic);
+}
+
+double Dbfs(double amplitude)
+{
+    return 20 * std::log10(amplitude);
+}
+
+void TestDuckAttackHoldRelease()
+{
+    // The voice is on from 1.0 s to 2.0 s, at -20 dBFS peak.
+    auto voice = [](double t) { return t >= 1.0 && t < 2.0 ? 0.1 : 0.0; };
+    const DuckRun run = RunDuck(4.0, voice, true);
+    CHECK(std::fabs(DbAt(run, 0.9)) < 0.01, "untouched before the voice: %.2f dB", DbAt(run, 0.9));
+    CHECK(std::fabs(DbAt(run, 1.0 + 0.012) + 12) < 0.5, "full depth within the attack: %.2f dB",
+        DbAt(run, 1.012));
+    CHECK(DbAt(run, 1.0 + 0.003) > -12 + 1, "attack is a ramp, not a step: %.2f dB",
+        DbAt(run, 1.003));
+    CHECK(std::fabs(DbAt(run, 1.9) + 12) < 0.5, "held while talking: %.2f dB", DbAt(run, 1.9));
+    CHECK(std::fabs(DbAt(run, 2.0 + 0.28) + 12) < 0.5, "held 280 ms after the voice: %.2f dB",
+        DbAt(run, 2.28));
+    CHECK(std::fabs(DbAt(run, 2.0 + 0.3 + 0.25) + 6) < 1.0, "half way back after 250 ms: %.2f dB",
+        DbAt(run, 2.55));
+    CHECK(std::fabs(DbAt(run, 2.0 + 0.3 + 0.5 + 0.02)) < 0.3,
+        "recovered after the release: %.2f dB", DbAt(run, 2.82));
+    for (float g : run.micGain) {
+        CHECK(g == 1.0f, "the microphone is never ducked: %f", g);
+        if (g != 1.0f) {
+            break;
+        }
+    }
+}
+
+void TestDuckHasNoSteps()
+{
+    auto voice = [](double t) { return t >= 1.0 && t < 2.0 ? 0.1 : 0.0; };
+    const DuckRun run = RunDuck(4.0, voice, true);
+    float worst = 0;
+    for (size_t i = 1; i < run.music.size(); i++) {
+        worst = std::max(worst, std::fabs(run.music[i] - run.music[i - 1]));
+    }
+    // Fastest legitimate change: 12 dB over 10 ms is about 0.0003 per sample at 0.2.
+    CHECK(worst < 0.001, "largest sample step %.5f", worst);
+}
+
+void TestDuckThreshold()
+{
+    auto quiet = [](double) { return 0.002; }; // -54 dBFS peak, room noise
+    auto soft = [](double) { return 0.05; };   // -26 dBFS peak, a soft voice
+    const DuckRun low = RunDuck(1.0, quiet, true);
+    const DuckRun high = RunDuck(1.0, soft, true);
+    CHECK(std::fabs(DbAt(low, 0.9)) < 0.01, "room noise does not duck: %.2f dB", DbAt(low, 0.9));
+    CHECK(std::fabs(DbAt(high, 0.9) + 12) < 0.5, "a soft voice ducks: %.2f dB", DbAt(high, 0.9));
+    CHECK(Dbfs(0.05 / std::sqrt(2.0)) > blend::kDuckThresholdDb, "test voice is above");
+    // A muted microphone is not talking.
+    const DuckRun muted = RunDuck(1.0, soft, true, 0.0f);
+    CHECK(std::fabs(DbAt(muted, 0.9)) < 0.01, "a muted mic does not duck: %.2f dB",
+        DbAt(muted, 0.9));
+}
+
+void TestDuckOffIsBitExact()
+{
+    // Reference: the loop the bus thread ran before ducking existed.
+    const uint32_t frames = 256;
+    std::vector<float> sources(3 * frames * 2);
+    uint32_t seed = 12345;
+    for (float& v : sources) {
+        seed = seed * 1664525u + 1013904223u;
+        v = float(int32_t(seed >> 8) - (1 << 23)) / float(1 << 23);
+    }
+    const uint32_t index[] = {2, 0, 1};
+    const float targets[] = {0.7f, 0.25f, 1.3f};
+    const float starts[] = {0.7f, 0.5f, 1.0f};
+    const blend::Route routes[] = {blend::Route::Both, blend::Route::Left, blend::Route::Right};
+    // The roles must not matter while ducking is off, nor while it is on and nobody talks.
+    const blend::Role roles[] = {blend::Role::Key, blend::Role::Ducked, blend::Role::Ducked};
+    std::vector<float> reference(frames * 2, 0.0f);
+    for (int e = 0; e < 3; e++) {
+        blend::AddSource(reference.data(), &sources[index[e] * frames * 2], frames, starts[e],
+            targets[e], 0.9f, routes[e]);
+    }
+    for (bool engaged : {false, true}) {
+        std::vector<float> acc(frames * 2, 0.0f);
+        std::atomic<float> current[3] = {starts[0], starts[1], starts[2]};
+        blend::DuckState state;
+        std::vector<float> silent = sources;
+        if (engaged) {
+            // Entry 0 is the key: make its level zero.
+            std::fill_n(&silent[index[0] * frames * 2], frames * 2, 0.0f);
+            std::vector<float> ref2(frames * 2, 0.0f);
+            for (int e = 0; e < 3; e++) {
+                blend::AddSource(ref2.data(), &silent[index[e] * frames * 2], frames, starts[e],
+                    targets[e], 0.9f, routes[e]);
+            }
+            blend::MixBlock(acc.data(), frames, 3, silent.data(), frames * 2, index, targets,
+                routes, roles, current, 0.9f, kRate, &state);
+            CHECK(std::memcmp(acc.data(), ref2.data(), acc.size() * sizeof(float)) == 0,
+                "idle ducking is bit-exact");
+        } else {
+            blend::MixBlock(acc.data(), frames, 3, sources.data(), frames * 2, index, targets,
+                routes, roles, current, 0.9f, kRate, nullptr);
+            CHECK(std::memcmp(acc.data(), reference.data(), acc.size() * sizeof(float)) == 0,
+                "ducking off is bit-exact");
+        }
+        for (int e = 0; e < 3; e++) {
+            CHECK(current[e].load() == targets[e], "ramp ends at the target");
+        }
+    }
+}
+
 } // namespace
 
 int main()
@@ -282,6 +447,10 @@ int main()
     TestSplitRouting();
     TestStereoRouting();
     TestLimiterLinking();
+    TestDuckAttackHoldRelease();
+    TestDuckHasNoSteps();
+    TestDuckThreshold();
+    TestDuckOffIsBitExact();
     std::printf(failures ? "%d FAILED\n" : "all passed\n", failures);
     return failures ? 1 : 0;
 }

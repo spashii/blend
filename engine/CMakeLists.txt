@@ -56,6 +56,11 @@ target_link_libraries(BlendEngine
 add_executable(BlendDspTests tests/DspTests.cpp)
 add_test(NAME dsp COMMAND BlendDspTests)
 
+add_executable(BlendConfigTests tests/ConfigTests.cpp src/Config.cpp)
+target_include_directories(BlendConfigTests PRIVATE src)
+target_link_libraries(BlendConfigTests PRIVATE nlohmann_json::nlohmann_json)
+add_test(NAME config COMMAND BlendConfigTests)
+
 add_executable(BlendIdentityTests tests/IdentityTests.cpp)
 target_link_libraries(BlendIdentityTests PRIVATE nlohmann_json::nlohmann_json)
 file(GLOB BLEND_INVENTORIES ${CMAKE_SOURCE_DIR}/spikes/identity/data/*.json)
