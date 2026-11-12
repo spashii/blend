@@ -1,17 +1,24 @@
 # Blend Mic
 
-Build your own mic. Blend Mic mixes your voice with any app or everything your Mac plays into one microphone, with a slider for each.
+Build your own mic. A local dictation app only hears your microphone, so with headphones on it never hears the call. Blend Mic mixes your voice and the call into one mic, so a dictation app like [Handy](https://handy.computer) or [OpenSuperWhisper](https://github.com/Starmel/OpenSuperWhisper) transcribes both sides on your Mac.
 
 <picture>
   <source srcset="docs/images/panel-dark.png" media="(prefers-color-scheme: dark)">
-  <img src="docs/images/panel-light.png" width="365" alt="Blend Mic's menu bar panel: a mix called Calls, used by Zoom, with sliders and meters for the microphone and Music">
+  <img src="docs/images/panel-light.png" width="365" alt="Blend Mic's menu bar panel: a mix called Calls with sliders and meters for the microphone and Music">
 </picture>
-
-Each mix shows up as a microphone, so any app that lets you pick one can use it: Discord, Zoom, a call recorder, OBS, a website.
 
 ## Why
 
-I wanted something simple to hook into Discord and my call recorder. BlackHole needed a lot of setup before anything worked, and Loopback costs $99, so I made one that sits in the menu bar.
+I wanted my own transcription app to hear my online calls with my headphones on. BlackHole needed a lot of setup before anything worked, and Loopback costs $99, so I made one that sits in the menu bar. It takes an app's sound without rerouting it, so you keep hearing it, and it leaves the call out of system audio, so the call never hears itself.
+
+## What it does
+
+- **Your mic, one app, or everything your Mac plays,** each with its own slider.
+- **A mic in every app.** Each mix shows up as Blend Mic (its name) in Discord, Zoom or your dictation app.
+- **Split mode.** You on the left channel, the call on the right.
+- **Music ducks when you talk.** Off by default. Turn it on for a mix, and the other sources drop while you speak.
+- **The call never hears itself.** System audio leaves out the app using the mix, so the other side hears no echo.
+- **Up to 16 mixes.** One for Discord, another for your dictation app, each with its own sources.
 
 ## Install
 
@@ -23,7 +30,7 @@ brew trust spashii/blend
 brew install --cask blend
 ```
 
-Blend Mic opens to its Setup page. It installs the audio driver that makes mixes appear as microphones (one administrator password), asks for the microphone and for audio from other apps, and offers to open at login. Mixes are silent while Blend Mic is closed, so leave that on. After that it updates itself, installing new versions while no app is using a mix.
+Blend Mic opens to its Setup page. It installs the audio driver that makes mixes appear as microphones (one administrator password), asks for the microphone and for audio from other apps, and offers to open at login. Mixes are silent while Blend Mic is closed, so leave that on.
 
 ## Requirements
 
@@ -31,9 +38,7 @@ Apple silicon and macOS 15 or later. Apple silicon because that's all it has bee
 
 ## Some notes
 
-Blend Mic is about a week old. Expect bugs.
-
-Report them at [github.com/spashii/blend/issues](https://github.com/spashii/blend/issues).
+Blend Mic is new. Expect bugs, and report them at [github.com/spashii/blend/issues](https://github.com/spashii/blend/issues).
 
 ## Privacy
 

@@ -3,148 +3,485 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Blend Mic: mix your mic with any app's sound on your Mac</title>
-<meta name="description" content="Blend Mic mixes your voice and your Mac's sound into one microphone. Record a call with headphones on, or play music into Discord. Free and open source, for macOS.">
-<meta property="og:title" content="Blend Mic: mix your mic with any app's sound on your Mac">
-<meta property="og:description" content="Blend Mic mixes your voice and your Mac's sound into one microphone. Record a call with headphones on, or play music into Discord. Free and open source, for macOS.">
+<title>Blend Mic: a free virtual microphone for Mac</title>
+<meta name="description" content="Blend Mic is a free, open source virtual microphone for Mac. Mix your voice with a call or any app's sound, so Handy, OpenSuperWhisper or any dictation app transcribes both sides, even with headphones on.">
+<link rel="canonical" href="https://spashii.github.io/blend/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Blend Mic">
+<meta property="og:url" content="https://spashii.github.io/blend/">
+<meta property="og:title" content="Blend Mic: a free virtual microphone for Mac">
+<meta property="og:description" content="Mix your voice with a call or any app's sound, so a local dictation app transcribes both sides, even with headphones on. Free and open source.">
+<meta property="og:image" content="https://spashii.github.io/blend/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#f7f7f8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111113" media="(prefers-color-scheme: dark)">
+<script type="application/ld+json">
+[
+ {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Blend Mic",
+  "description": "A free, open source virtual microphone for Mac that mixes your voice with a call or any app's sound, so a local dictation app can transcribe both sides, even with headphones on.",
+  "applicationCategory": "MultimediaApplication",
+  "operatingSystem": "macOS 15 or later, Apple silicon",
+  "softwareVersion": "0.8.0",
+  "license": "https://opensource.org/licenses/MIT",
+  "url": "https://spashii.github.io/blend/",
+  "downloadUrl": "https://github.com/spashii/blend/releases/latest/download/Blend.dmg",
+  "codeRepository": "https://github.com/spashii/blend",
+  "image": "https://spashii.github.io/blend/og.png",
+  "offers": {
+   "@type": "Offer",
+   "price": "0",
+   "priceCurrency": "USD"
+  },
+  "author": {
+   "@type": "Person",
+   "name": "Sameer",
+   "url": "https://github.com/spashii"
+  }
+ },
+ {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+   {
+    "@type": "Question",
+    "name": "How do I record both sides of a call on a Mac with headphones on?",
+    "acceptedAnswer": {
+     "@type": "Answer",
+     "text": "Make a mix in Blend Mic with your microphone and System audio, then pick that mix as the microphone in your dictation or recording app. Leave the call app on your usual microphone. Split mode puts you on the left channel and the call on the right."
+    }
+   },
+   {
+    "@type": "Question",
+    "name": "Is Blend Mic free?",
+    "acceptedAnswer": {
+     "@type": "Answer",
+     "text": "Yes. It is free and open source under the MIT license, with no accounts."
+    }
+   },
+   {
+    "@type": "Question",
+    "name": "How is Blend Mic different from BlackHole or Loopback?",
+    "acceptedAnswer": {
+     "@type": "Answer",
+     "text": "BlackHole is a free virtual audio device with no mixer, so you route sound through it in Audio MIDI Setup. Loopback mixes sources but costs $99. Blend Mic is a free menu bar app where each mix is a microphone with a slider per source, and it captures an app without rerouting it, so you keep hearing it."
+    }
+   },
+   {
+    "@type": "Question",
+    "name": "Can't macOS make a virtual mic on its own?",
+    "acceptedAnswer": {
+     "@type": "Answer",
+     "text": "No. Audio MIDI Setup can make an aggregate device, but it puts devices side by side instead of mixing them, so a call app hears only the first channels, usually just your mic. It can't capture one app's sound either. For that you need a driver like BlackHole plus a Multi-Output Device, which takes everything your Mac plays, with no volume per app, and a call would hear itself. Blend Mic mixes your sources into one mic, with a slider for each."
+    }
+   },
+   {
+    "@type": "Question",
+    "name": "Which apps can use a Blend Mic mix?",
+    "acceptedAnswer": {
+     "@type": "Answer",
+     "text": "Any app that lets you pick a microphone, such as Handy, OpenSuperWhisper, Discord, Zoom, Google Meet and QuickTime Player. Each mix shows up as Blend Mic followed by its name."
+    }
+   },
+   {
+    "@type": "Question",
+    "name": "How much delay does Blend Mic add?",
+    "acceptedAnswer": {
+     "@type": "Answer",
+     "text": "About 30 ms through a mix, and about 75 ms with echo cancellation on, measured on Apple silicon."
+    }
+   },
+   {
+    "@type": "Question",
+    "name": "Does Blend Mic install a kernel extension?",
+    "acceptedAnswer": {
+     "@type": "Answer",
+     "text": "No. It installs a Core Audio plug-in that runs in user space. It asks for an administrator password once, and Uninstall in its settings removes it."
+    }
+   },
+   {
+    "@type": "Question",
+    "name": "What does Blend Mic need?",
+    "acceptedAnswer": {
+     "@type": "Answer",
+     "text": "A Mac with Apple silicon and macOS 15 or later."
+    }
+   }
+  ]
+ }
+]
+</script>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <style>
   :root {
     --bg: #f7f7f8; --card: #fff; --fg: #0b0b0c; --muted: #6b6b73; --line: #e8e8ea;
-    --accent: #3074fe; --green: #34c759;
+    --accent: #3074fe; --green: #34c759; --glass: rgba(255,255,255,.62); --frame: #e9e9ed;
     --ring: 0 2px 6px rgba(0,0,0,.06), 0 0 0 1px rgba(0,0,0,.05);
     --ring-lg: 0 30px 60px -28px rgba(16,24,40,.3), 0 0 0 1px rgba(0,0,0,.05);
     --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
   }
-  * { box-sizing: border-box; margin: 0; }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111113; --card: #1c1c1f; --fg: #f2f2f4; --muted: #9a9aa3; --line: #2c2c31;
+      --glass: rgba(28,28,31,.6); --frame: #1f1f23;
+      --ring: 0 2px 6px rgba(0,0,0,.3), 0 0 0 1px rgba(255,255,255,.07);
+      --ring-lg: 0 30px 60px -28px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.08);
+    }
+  }
+  * { box-sizing: border-box; margin: 0; font-weight: 400; font-style: normal; }
+  html { scroll-padding-top: 88px; }
+
+  /* Four text styles only: h1, h2, h3 and body. Links underline only on hover. */
   body { background: var(--bg); color: var(--fg); font: 17px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
-  a { color: inherit; }
-  main { max-width: 960px; margin: 0 auto; padding: 0 24px; }
-
-  .hero { display: grid; grid-template-columns: 1.1fr 1fr; gap: 56px; align-items: center; padding: 96px 0 72px; }
   h1 { font-size: 56px; line-height: 1.05; letter-spacing: -.035em; font-weight: 700; }
-  .lede { margin-top: 20px; font-size: 19px; color: var(--muted); max-width: 30ch; }
-  .actions { display: flex; gap: 12px; margin-top: 32px; flex-wrap: wrap; }
-  .button { display: inline-block; padding: 12px 20px; border-radius: 12px; font-weight: 600; text-decoration: none; box-shadow: var(--ring); background: var(--card); }
+  h2 { font-size: 28px; line-height: 1.2; letter-spacing: -.02em; font-weight: 600; }
+  h3 { font-size: 17px; line-height: 1.4; letter-spacing: -.01em; font-weight: 600; }
+  a { color: inherit; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  p a { color: var(--accent); }
+  .muted { color: var(--muted); }
+  /* Spacing scale: 8 inside a group, 16 between related items, 24 to 32 within a section, --section between sections. */
+  :root { --section: 112px; }
+  main { max-width: 960px; margin: 0 auto; padding: 0 24px var(--section); }
+  main > section + section { margin-top: var(--section); }
+
+  .nav { position: fixed; z-index: 10; top: 12px; left: 50%; transform: translateX(-50%); width: min(912px, calc(100% - 24px)); display: flex; align-items: center; gap: 16px; padding: 8px 8px 8px 14px; border-radius: 16px; background: var(--glass); -webkit-backdrop-filter: saturate(180%) blur(18px); backdrop-filter: saturate(180%) blur(18px); box-shadow: var(--ring); }
+  .brand { display: flex; align-items: center; gap: 8px; }
+  .brand:hover { text-decoration: none; }
+  .brand img { width: 24px; height: 24px; }
+  .nav .links { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+  .nav .links > a:not(.button) { color: var(--muted); }
+
+  .button { display: inline-block; padding: 12px 20px; border-radius: 12px; }
+  .button:hover { text-decoration: none; }
   .button.primary { background: linear-gradient(#3f80ff, #2867f2); color: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.25); }
-  .meta { margin-top: 16px; font-size: 14px; color: var(--muted); }
+  .button.outline { box-shadow: inset 0 0 0 1.5px var(--line); }
+  .button.outline:hover { box-shadow: inset 0 0 0 1.5px var(--muted); }
+  .button.small { padding: 6px 14px; border-radius: 10px; }
 
-  /* The menu bar panel, drawn rather than pictured. */
-  .panel { background: rgba(255,255,255,.92); border-radius: 18px; box-shadow: var(--ring-lg); padding: 16px; font-size: 14px; }
-  .panel header { display: flex; justify-content: space-between; font-weight: 600; margin-bottom: 12px; }
-  .mix { display: flex; align-items: center; gap: 8px; font-weight: 600; }
-  .mix small { margin-left: auto; font-weight: 500; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .hero { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; padding-top: 136px; }
+  .lede { margin-top: 24px; max-width: 36ch; }
+  .actions { display: flex; gap: 16px; margin-top: 32px; flex-wrap: wrap; }
+  .meta { margin-top: 16px; }
+
+  /* Hero demo: a call plays into a mix while a dictation app transcribes both sides. */
+  .demo { position: relative; width: 100%; max-width: 440px; justify-self: center; }
+  .card { background: var(--card); border-radius: 16px; box-shadow: var(--ring-lg); padding: 16px 18px; }
+  .card header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+  .card header .status { color: var(--muted); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
   .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
-  .source { margin: 12px 0 0 20px; }
-  .source span { display: block; margin-bottom: 6px; }
+  .rec { width: 8px; height: 8px; border-radius: 50%; background: #ff3b30; animation: blink 1.2s infinite; }
+  @keyframes blink { 50% { opacity: .3; } }
+  .source + .source { margin-top: 12px; }
+  .source .name { display: flex; justify-content: space-between; margin-bottom: 6px; }
   .slider { position: relative; height: 4px; border-radius: 2px; background: var(--line); }
-  .slider i { position: absolute; inset: 0 auto 0 0; border-radius: 2px; background: var(--accent); }
-  .slider b { position: absolute; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
-  .meter { height: 3px; margin-top: 6px; border-radius: 2px; background: linear-gradient(90deg, var(--green) var(--level), var(--line) var(--level)); }
-  .panel footer { display: flex; justify-content: space-between; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); }
+  .slider .fill { position: absolute; inset: 0 auto 0 0; border-radius: 2px; background: var(--accent); }
+  .slider .knob { position: absolute; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+  .meter { height: 3px; margin-top: 6px; border-radius: 2px; background: var(--line); overflow: hidden; }
+  .meter .level { display: block; height: 100%; width: 4%; border-radius: 2px; background: var(--green); transition: width .35s ease-out; }
+  .hint { margin: -4px 0 12px; }
+  .ears { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .transcript { margin: -8px 0 0 20px; position: relative; min-height: 196px; }
+  .line { display: flex; gap: 10px; margin-top: 8px; opacity: 0; transform: translateY(4px); transition: opacity .3s, transform .3s; }
+  .line.on { opacity: 1; transform: none; }
+  .line .who { flex: 0 0 40px; color: var(--muted); }
+  .line.you .who { color: var(--accent); }
+  .caret::after { content: ""; display: inline-block; width: 1.5px; height: 1em; margin-left: 1px; vertical-align: -2px; background: var(--fg); animation: blink 1s steps(1) infinite; }
 
-  .points { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; padding-bottom: 72px; }
+  .shots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; align-items: start; }
+  .shots figure { margin: 0; }
+  .frame { position: relative; aspect-ratio: 4 / 3; border-radius: 16px; background: var(--frame); }
+  .frame img { position: absolute; inset: 20px; width: calc(100% - 40px); height: calc(100% - 40px); object-fit: contain; filter: drop-shadow(0 8px 16px rgba(0,0,0,.18)); }
+  .shots figcaption { margin-top: 16px; color: var(--muted); }
+
+  .why, .bottom { max-width: 640px; }
+
+  .points { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
   .point { background: var(--card); border-radius: 16px; box-shadow: var(--ring); padding: 24px; }
-  .point h2 { font-size: 17px; letter-spacing: -.01em; }
-  .point p { margin-top: 6px; color: var(--muted); font-size: 15px; }
+  .point p { margin-top: 8px; color: var(--muted); }
+  .art { height: 132px; margin-bottom: 24px; padding: 14px 16px; border-radius: 12px; background: var(--frame); display: flex; flex-direction: column; justify-content: center; gap: 8px; overflow: hidden; }
+  .art .row { display: flex; align-items: center; gap: 10px; }
+  .art .row > span:first-child { flex: 0 0 64px; color: var(--muted); }
+  .art .bar { position: relative; flex: 1; height: 6px; border-radius: 3px; background: var(--line); }
+  .art .bar span { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--green); }
+  .art .bar .was { background: none; box-shadow: inset 0 0 0 1px var(--muted); opacity: .5; }
+  .art .tag { color: var(--muted); }
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 6px; }
+  .switch { flex: 0 0 auto; position: relative; width: 38px; height: 22px; border-radius: 11px; background: var(--line); }
+  .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
+  .switch.on { background: var(--green); }
+  .switch.on::after { left: 18px; }
+  .menu { align-self: stretch; border-radius: 10px; background: var(--card); box-shadow: var(--ring); padding: 4px; }
+  .menu div { padding: 3px 10px; border-radius: 6px; white-space: nowrap; }
+  .menu .picked { background: var(--accent); color: #fff; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { padding: 4px 12px; border-radius: 999px; background: var(--card); box-shadow: var(--ring); white-space: nowrap; }
+  .chip.out { color: var(--muted); text-decoration: line-through; box-shadow: inset 0 0 0 1px var(--line); background: none; }
 
-  .why, .rough { max-width: 640px; }
-  .why { padding-bottom: 56px; font-size: 19px; }
-  .rough { padding-bottom: 72px; color: var(--muted); font-size: 15px; }
-  .rough h2 { font-size: 17px; letter-spacing: -.01em; color: var(--fg); margin-bottom: 6px; }
+  .work { display: grid; gap: 16px; margin-top: 24px; max-width: 640px; }
+  .work .point { display: flex; gap: 16px; align-items: flex-start; }
+  .work img { flex: 0 0 auto; border-radius: 12px; }
+  .work .point:hover { text-decoration: none; box-shadow: inset 0 0 0 1.5px var(--muted); }
+  .work .point:hover h3 { text-decoration: underline; }
 
-  .bottom { text-align: center; padding: 0 0 96px; }
+  .faq { max-width: 640px; }
+  .faq-list { margin-top: 24px; border-top: 1px solid var(--line); }
+  .faq details { border-bottom: 1px solid var(--line); }
+  .faq summary { display: flex; justify-content: space-between; gap: 16px; padding: 16px 0; cursor: pointer; list-style: none; }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::after { content: "+"; color: var(--muted); }
+  .faq details[open] summary::after { content: "\2212"; }
+  .faq details p { padding-bottom: 16px; color: var(--muted); }
   .bottom p { color: var(--muted); }
-  .bottom .actions { justify-content: center; }
-  .brew { margin-top: 20px; font-size: 14px; }
-  code { font: 13px ui-monospace, "SF Mono", Menlo, monospace; background: var(--card); padding: 2px 6px; border-radius: 6px; box-shadow: var(--ring); }
-  footer.site { border-top: 1px solid var(--line); padding: 24px; text-align: center; font-size: 14px; color: var(--muted); }
+  .bottom .actions { margin-top: 32px; }
+  .brew { margin-top: 32px; }
+  .cmd { position: relative; margin-top: 8px; border-radius: 12px; background: var(--card); box-shadow: var(--ring); }
+  .cmd pre { margin: 0; padding: 14px 88px 14px 16px; overflow-x: auto; font: 15px/1.6 ui-monospace, "SF Mono", Menlo, monospace; color: var(--fg); }
+  .copy { position: absolute; top: 8px; right: 8px; padding: 4px 12px; border: 0; border-radius: 8px; font: inherit; color: var(--fg); background: var(--frame); cursor: pointer; }
+  .copy:hover { box-shadow: inset 0 0 0 1px var(--muted); }
+  footer.site { max-width: 960px; margin: 0 auto; border-top: 1px solid var(--line); padding: 32px 24px; color: var(--muted); }
+  footer.site a { color: var(--fg); }
 
   @media (max-width: 780px) {
-    .hero { grid-template-columns: 1fr; gap: 40px; padding: 56px 0 48px; }
+    :root { --section: 72px; }
+    .hero { grid-template-columns: 1fr; gap: 48px; padding-top: 104px; }
     h1 { font-size: 42px; }
-    .points { grid-template-columns: 1fr; }
-    .why { font-size: 17px; padding-bottom: 40px; }
-    .rough { padding-bottom: 56px; }
+    h2 { font-size: 24px; }
+    .shots, .points { grid-template-columns: 1fr; }
+    .transcript { margin-left: 16px; }
   }
-  .shot img, .shots img { display: block; width: 100%; height: auto; border-radius: 14px; }
-  .hero-shot { justify-self: center; max-width: 365px; width: 100%; }
-  .shots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; padding: 0 0 64px; }
-  .shots figure { margin: 0; }
-  .shots img { border: 1px solid var(--line); }
-  .shots figcaption { margin-top: 10px; color: var(--muted); font-size: 15px; }
-  @media (max-width: 780px) { .shots { grid-template-columns: 1fr; } }
+  @media (max-width: 420px) { .nav .links > a:not(.button) { display: none; } }
 </style>
 </head>
 <body>
+<nav class="nav">
+  <a class="brand" href="#"><img src="icon.svg" alt="">Blend Mic</a>
+  <div class="links">
+    <a href="https://github.com/spashii/blend">GitHub</a>
+    <a class="button primary small" href="https://github.com/spashii/blend/releases/latest/download/Blend.dmg">Download</a>
+  </div>
+</nav>
+
 <main>
   <section class="hero">
     <div>
       <h1>Build your own mic.</h1>
-      <p class="lede">Blend Mic mixes your voice with any app or everything your Mac plays into one microphone, with a slider for each. Record a call with your AirPods in, or play music into Discord under your voice.</p>
+      <p class="lede muted">A local dictation app only hears your microphone, so with headphones on it never hears the call. Blend Mic mixes your voice and the call into one mic, so a dictation app like Handy or OpenSuperWhisper transcribes both sides on your Mac.</p>
       <div class="actions">
-        <a class="button primary" href="https://github.com/spashii/blend/releases/latest">Download for Mac</a>
-        <a class="button" href="https://github.com/spashii/blend">View on GitHub</a>
+        <a class="button primary" href="https://github.com/spashii/blend/releases/latest/download/Blend.dmg">Download for Mac</a>
+        <a class="button outline" href="https://github.com/spashii/blend/releases">GitHub releases</a>
       </div>
-      <p class="meta">Free and open source (MIT) · Updates itself · Apple silicon, macOS 15 or later</p>
+      <p class="meta muted">Free and open source (MIT) · Apple silicon, macOS 15 or later</p>
     </div>
-    <picture class="shot hero-shot">
-      <source srcset="screens/01-panel-dark.png" media="(prefers-color-scheme: dark)">
-      <img src="screens/01-panel-light.png" width="365" alt="Blend Mic's menu bar panel: a mix called Calls, used by Zoom, with sliders and meters for the microphone and Music">
-    </picture>
+
+    <div class="demo" role="img" aria-label="A Blend Mic mix of your microphone and the call in Google Chrome, heard on AirPods, while a dictation app transcribes both sides">
+      <div class="card">
+        <header><h3>Blend Mic (Calls)</h3><span class="status"><span class="dot"></span>in use</span></header>
+        <p class="hint muted">A new mic, made of:</p>
+        <div class="source"><div class="name">MacBook Pro Microphone</div><div class="slider"><span class="fill" style="width:80%"></span><span class="knob" style="left:80%"></span></div><div class="meter"><span class="level" id="m-you"></span></div></div>
+        <div class="source"><div class="name">Google Chrome <span class="muted">the call</span></div><div class="slider"><span class="fill" style="width:65%"></span><span class="knob" style="left:65%"></span></div><div class="meter"><span class="level" id="m-call"></span></div></div>
+        <div class="ears muted">You hear the call on AirPods Pro</div>
+      </div>
+      <div class="card transcript">
+        <header><h3>Your dictation app (using Blend Mic)</h3><span class="status"><span class="rec"></span></span></header>
+        <div id="lines"></div>
+      </div>
+    </div>
   </section>
 
   <section class="shots">
     <figure>
-      <picture><source srcset="screens/03-add-source-dark.png" media="(prefers-color-scheme: dark)"><img src="screens/03-add-source-light.png" alt="The Add a source sheet: inputs, system audio, and each app playing sound with a live meter" loading="lazy"></picture>
+      <div class="frame"><picture><source srcset="screens/03-add-source-dark.png" media="(prefers-color-scheme: dark)"><img src="screens/03-add-source-light.png" alt="The Add a source sheet: inputs, system audio, and each app playing sound with a live meter" loading="lazy"></picture></div>
       <figcaption>Add your mic, one app, or everything your Mac plays.</figcaption>
     </figure>
     <figure>
-      <picture><source srcset="screens/04-split-dark.png" media="(prefers-color-scheme: dark)"><img src="screens/04-split-light.png" alt="A Call recorder mix with Split by channel on: the microphone on the left channel and Zoom on the right" loading="lazy"></picture>
+      <div class="frame"><picture><source srcset="screens/04-split-dark.png" media="(prefers-color-scheme: dark)"><img src="screens/04-split-light.png" alt="A mix with Split by channel on: the microphone on the left channel and the call on the right" loading="lazy"></picture></div>
       <figcaption>Split mode: you on the left, the call on the right.</figcaption>
     </figure>
     <figure>
-      <picture><source srcset="screens/06-zoom-mic-menu-dark.png" media="(prefers-color-scheme: dark)"><img src="screens/06-zoom-mic-menu-light.png" alt="Zoom's audio settings with the Calls mix picked as the microphone" loading="lazy"></picture>
-      <figcaption>Each mix is a microphone you pick in Zoom, Discord or a recorder.</figcaption>
+      <div class="frame"><picture><source srcset="screens/05-check-dark.png" media="(prefers-color-scheme: dark)"><img src="screens/05-check-light.png" alt="The menu bar panel checking the Calls mix by recording five seconds to play back" loading="lazy"></picture></div>
+      <figcaption>Check a mix: it plays five seconds back to you.</figcaption>
     </figure>
   </section>
 
   <section class="why">
-    <p>I wanted something simple to hook into Discord and my call recorder. BlackHole needed a lot of setup before anything worked, and Loopback costs $99, so I made one that sits in the menu bar. It takes an app's sound without rerouting it, so you keep hearing it, and it leaves the call out of system audio, so the call never hears itself.</p>
+    <p>I wanted my own transcription app to hear my online calls with my headphones on. BlackHole needed a lot of setup before anything worked, and Loopback costs $99, so I made one that sits in the menu bar. It takes an app's sound without rerouting it, so you keep hearing it, and it leaves the call out of system audio, so the call never hears itself.</p>
   </section>
 
   <section class="points">
     <div class="point">
-      <h2>Record calls with headphones on</h2>
-      <p>Your recorder picks Blend Mic and hears you and the call, even with AirPods in. Split mode puts you on the left and the call on the right, and <a href="https://spashii.github.io/voice/">Voice</a> uses it to transcribe each side. Tell the other side you're recording.</p>
+      <div class="art" aria-hidden="true">
+        <div class="menu"><div>MacBook Pro Microphone</div><div class="picked">Blend Mic (Calls)</div><div>Blend Mic (Discord)</div></div>
+      </div>
+      <h3>A mic in every app</h3>
+      <p>Each mix shows up as Blend Mic (its name) in Discord, Zoom or your dictation app.</p>
     </div>
     <div class="point">
-      <h2>Mic, apps or all system audio</h2>
-      <p>Any input device, any app or everything the Mac plays. A call using the mix never hears itself.</p>
+      <div class="art" aria-hidden="true">
+        <div class="toggle-row"><span>Lower other sources while I talk</span><span class="switch on"></span></div>
+        <div class="row"><span>You</span><div class="bar"><span style="width:78%"></span></div></div>
+        <div class="row"><span>Music</span><div class="bar"><span class="was" style="width:70%"></span><span style="width:22%"></span></div></div>
+      </div>
+      <h3>Music ducks when you talk</h3>
+      <p>Off by default. Turn it on for a mix, and the other sources drop while you speak.</p>
     </div>
     <div class="point">
-      <h2>Up to 16 mixes</h2>
-      <p>Each mix is its own microphone, so Discord can use one while a recorder uses another.</p>
+      <div class="art" aria-hidden="true">
+        <div class="tag">System audio</div>
+        <div class="chips"><span class="chip">Music</span><span class="chip">Safari</span><span class="chip out">Zoom</span></div>
+      </div>
+      <h3>The call never hears itself</h3>
+      <p>System audio leaves out the app using the mix, so the other side hears no echo.</p>
     </div>
     <div class="point">
-      <h2>Updates itself</h2>
-      <p>New versions install on their own while no app is using a mix, so a call is never cut off.</p>
+      <div class="art" aria-hidden="true">
+        <div class="chips"><span class="chip">Blend Mic (Calls)</span><span class="chip">Blend Mic (Discord)</span><span class="chip">Blend Mic (Stream)</span><span class="chip out" style="text-decoration:none">13 more</span></div>
+      </div>
+      <h3>Up to 16 mixes</h3>
+      <p>One for Discord, another for your dictation app, each with its own sources.</p>
     </div>
   </section>
 
-  <section class="rough">
-    <h2>Rough edges</h2>
-    <p>Apple silicon, macOS 15 or later. It installs a Core Audio plug-in that runs in user space, not a kernel extension, and Uninstall in its settings removes it. Mixes go silent while Blend Mic is closed, so turn on Open at login.</p>
+  <section class="recommend">
+    <h2>My other work</h2>
+    <div class="work">
+      <a class="point" href="https://dembrane.com">
+        <img src="icons/dembrane.png" alt="" width="52" height="52">
+        <div><h3>dembrane</h3>
+        <p>Makes sense of big, messy conversations, so everyone can shape what happens next.</p></div>
+      </a>
+      <a class="point" href="https://spashii.github.io/voice/">
+        <img src="icons/voice.svg" alt="" width="52" height="52">
+        <div><h3>Voice (beta)</h3>
+        <p>The local dictation app I recommend with Blend Mic. In split mode it transcribes you and the call separately. Tell the other side you're recording.</p></div>
+      </a>
+    </div>
+  </section>
+
+  <section class="faq">
+    <h2>Questions</h2>
+    <div class="faq-list">
+      <details>
+        <summary><h3>How do I record both sides of a call on a Mac with headphones on?</h3></summary>
+        <p>Make a mix in Blend Mic with your microphone and System audio, then pick that mix as the microphone in your dictation or recording app. Leave the call app on your usual microphone. Split mode puts you on the left channel and the call on the right.</p>
+      </details>
+      <details>
+        <summary><h3>Is Blend Mic free?</h3></summary>
+        <p>Yes. It is free and open source under the MIT license, with no accounts.</p>
+      </details>
+      <details>
+        <summary><h3>How is Blend Mic different from BlackHole or Loopback?</h3></summary>
+        <p>BlackHole is a free virtual audio device with no mixer, so you route sound through it in Audio MIDI Setup. Loopback mixes sources but costs $99. Blend Mic is a free menu bar app where each mix is a microphone with a slider per source, and it captures an app without rerouting it, so you keep hearing it.</p>
+      </details>
+      <details>
+        <summary><h3>Can't macOS make a virtual mic on its own?</h3></summary>
+        <p>No. Audio MIDI Setup can make an aggregate device, but it puts devices side by side instead of mixing them, so a call app hears only the first channels, usually just your mic. It can't capture one app's sound either. For that you need a driver like BlackHole plus a Multi-Output Device, which takes everything your Mac plays, with no volume per app, and a call would hear itself. Blend Mic mixes your sources into one mic, with a slider for each.</p>
+      </details>
+      <details>
+        <summary><h3>Which apps can use a Blend Mic mix?</h3></summary>
+        <p>Any app that lets you pick a microphone, such as Handy, OpenSuperWhisper, Discord, Zoom, Google Meet and QuickTime Player. Each mix shows up as Blend Mic followed by its name.</p>
+      </details>
+      <details>
+        <summary><h3>How much delay does Blend Mic add?</h3></summary>
+        <p>About 30 ms through a mix, and about 75 ms with echo cancellation on, measured on Apple silicon.</p>
+      </details>
+      <details>
+        <summary><h3>Does Blend Mic install a kernel extension?</h3></summary>
+        <p>No. It installs a Core Audio plug-in that runs in user space. It asks for an administrator password once, and Uninstall in its settings removes it.</p>
+      </details>
+      <details>
+        <summary><h3>What does Blend Mic need?</h3></summary>
+        <p>A Mac with Apple silicon and macOS 15 or later.</p>
+      </details>
+    </div>
   </section>
 
   <section class="bottom">
-    <p>Your audio never leaves your Mac, and there are no accounts. Blend Mic checks for updates once a day, and the update server counts those checks by app, version and country and never stores your IP address.</p>
+    <p>Your audio never leaves your Mac, and there are no accounts. Blend Mic checks for updates once a day, and the update server counts those checks by app, version and country and never stores your IP address. This page counts visits with Cloudflare Web Analytics, which sets no cookies and doesn't track you across sites.</p>
     <div class="actions">
-      <a class="button primary" href="https://github.com/spashii/blend/releases/latest">Download for Mac</a>
+      <a class="button primary" href="https://github.com/spashii/blend/releases/latest/download/Blend.dmg">Download for Mac</a>
+      <a class="button outline" href="https://github.com/spashii/blend/releases">GitHub releases</a>
     </div>
-    <p class="brew">Or with Homebrew: <code>brew tap spashii/blend https://github.com/spashii/blend</code>, then <code>brew trust spashii/blend</code> and <code>brew install --cask blend</code></p>
+    <div class="brew">
+      <p>Or with Homebrew:</p>
+      <div class="cmd"><pre id="brew">brew tap spashii/blend https://github.com/spashii/blend
+brew trust spashii/blend
+brew install --cask blend</pre><button type="button" class="copy" data-copy="brew">Copy</button></div>
+    </div>
   </section>
 </main>
 <footer class="site">Made by <a href="https://github.com/spashii">Sameer</a>. MIT licensed. <a href="https://github.com/spashii/blend">Source on GitHub</a></footer>
+
+<script>
+document.querySelectorAll(".copy").forEach(button => button.addEventListener("click", async () => {
+  const text = document.getElementById(button.dataset.copy).textContent;
+  try { await navigator.clipboard.writeText(text); button.textContent = "Copied"; }
+  catch { getSelection().selectAllChildren(document.getElementById(button.dataset.copy)); button.textContent = "Press ⌘C"; }
+  setTimeout(() => button.textContent = "Copy", 1600);
+}));
+// A 12 second loop. It stops while the demo is off screen or the tab is hidden, and shows
+// the finished transcript without motion when the viewer asks for reduced motion.
+(() => {
+  const script = [
+    ["Call", "Can you send the deck before Friday?"],
+    ["You", "Yes, tonight. I'll add the pricing page."],
+    ["Call", "Perfect. Loop in Maya too."],
+    ["You", "Will do."],
+  ];
+  const lines = document.getElementById("lines");
+    const meters = { You: document.getElementById("m-you"), Call: document.getElementById("m-call") };
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const row = ([who, text]) => {
+    const el = document.createElement("div");
+    el.className = "line" + (who === "You" ? " you" : "");
+    el.innerHTML = '<span class="who"></span><span></span>';
+    el.firstChild.textContent = who;
+    lines.append(el);
+    return el;
+  };
+  if (still) {
+    script.forEach(s => { const el = row(s); el.classList.add("on"); el.lastChild.textContent = s[1]; });
+    return;
+  }
+  let t0 = performance.now(), raf = 0, visible = true, built = [], lastTick = -1;
+  const SPEAK = 45;       // ms per character
+  const GAP = 600;        // ms between turns
+  const LOOP = 11000;
+  const turns = [];
+  let at = 500;
+  for (const s of script) { turns.push({ s, start: at, end: at + s[1].length * SPEAK }); at += s[1].length * SPEAK + GAP; }
+  const reset = () => { lines.textContent = ""; built = turns.map(x => row(x.s)); };
+  reset();
+  const frame = now => {
+    let t = now - t0;
+    if (t > LOOP) { t0 = now; t = 0; reset(); }
+    let speaking = null;
+    turns.forEach((x, i) => {
+      const el = built[i];
+      if (t < x.start) return;
+      el.classList.add("on");
+      const n = Math.min(x.s[1].length, Math.floor((t - x.start) / SPEAK));
+      el.lastChild.textContent = x.s[1].slice(0, n);
+      el.lastChild.classList.toggle("caret", t < x.end);
+      if (t < x.end) speaking = x.s[0];
+    });
+    const tick = Math.floor(t / 350);
+    if (tick !== lastTick) for (const who in meters) {
+      const level = who === speaking ? 50 + Math.random() * 25 : 4;
+      meters[who].style.width = level.toFixed(0) + "%";
+    }
+    lastTick = tick;
+    raf = visible && !document.hidden ? requestAnimationFrame(frame) : 0;
+  };
+  const run = () => { if (!raf && visible && !document.hidden) raf = requestAnimationFrame(frame); };
+  new IntersectionObserver(([e]) => { visible = e.isIntersecting; run(); }).observe(document.querySelector(".demo"));
+  document.addEventListener("visibilitychange", run);
+})();
+</script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "14285a6efcfe4ee891ba0c75f932711c"}'></script>
 </body>
 </html>

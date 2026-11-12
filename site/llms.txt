@@ -1,0 +1,22 @@
+# Blend Mic
+
+> Blend Mic is a free, open source (MIT) virtual microphone for Mac. It mixes your voice with a call or any app's sound into one microphone, so a local dictation app such as Handy or OpenSuperWhisper can transcribe both sides of an online call, even with headphones on. Apple silicon, macOS 15 or later.
+
+- Each mix is a microphone, named "Blend Mic (mix name)" in other apps, with a slider per source.
+- Sources: any input device, one app, or all system audio. System audio leaves out the app using the mix, so a call never hears itself.
+- Split mode puts the microphone on the left channel and the rest on the right, for apps that transcribe each side separately.
+- Ducking, off by default, lowers the other sources by 12 dB while you speak.
+- Up to 16 mixes.
+- Added delay: about 30 ms, or about 75 ms with echo cancellation on, measured on Apple silicon.
+- Installs a Core Audio plug-in that runs in user space, not a kernel extension. Uninstall in its settings removes it.
+- Alternatives it replaces: BlackHole (free, no mixer, set up in Audio MIDI Setup) and Loopback ($99).
+- Privacy: audio never leaves the Mac, no accounts, no analytics in the app.
+
+## Links
+
+- [Website](https://spashii.github.io/blend/)
+- [Download the latest DMG](https://github.com/spashii/blend/releases/latest/download/Blend.dmg)
+- [Source on GitHub](https://github.com/spashii/blend)
+- [Record online calls](https://github.com/spashii/blend/blob/main/docs/user/record-calls-with-headphones.md)
+- [Tested with](https://github.com/spashii/blend/blob/main/docs/user/tested-with.md)
+- [Troubleshooting](https://github.com/spashii/blend/blob/main/docs/user/troubleshooting.md)
