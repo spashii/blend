@@ -1,0 +1,10 @@
+module BlendKitCore {
+  header "BlendEngine.h"
+  header "BlendKit.h"
+  link "c++"
+  link framework "CoreAudio"
+  link framework "AudioToolbox"
+  link framework "AppKit"
+  link framework "Foundation"
+  export *
+}

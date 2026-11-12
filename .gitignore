@@ -4,3 +4,5 @@ app/Blend.xcodeproj/
 app/Blend/Info.plist
 app/Blend/Blend.entitlements
 __pycache__/
+kit/BlendKitCore.xcframework
+kit/.build/
