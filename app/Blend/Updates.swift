@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import Sparkle
 
-/// Updates come through Sparkle: it reads the appcast through apps.idea2prod.in, checks each
+/// Updates come through Sparkle: it reads the appcast through apps.firstversion.in, checks each
 /// update against the signing key in Info.plist, and asks before installing unless automatic
 /// updates are on. On the second launch it asks whether to check automatically; nothing else
 /// in Blend goes online.
@@ -60,7 +60,7 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     }
 
     /// Marks update checks from the owner's own Macs (`defaults write app.blend.Blend OwnerMac
-    /// -bool YES`) with `self=1` on the appcast URL, so the counts on apps.idea2prod.in can leave
+    /// -bool YES`) with `self=1` on the appcast URL, so the counts on apps.firstversion.in can leave
     /// them out. Everyone else's checks carry no parameters; system profiling stays off.
     nonisolated func feedParameters(for updater: SPUUpdater, sendingSystemProfile: Bool) -> [[String: String]] {
         UserDefaults.standard.bool(forKey: "OwnerMac") ? [["key": "self", "value": "1"]] : []
