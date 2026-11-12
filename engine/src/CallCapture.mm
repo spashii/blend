@@ -262,8 +262,11 @@ struct CallCapture::State
     uint64_t restarts = 0;
     std::unique_ptr<RepeatingTimer> ticker;
 
-    // Delivery queue.
+    // Delivery queue. `draining` is the control queue's pipeline as the delivery queue
+    // knows it: set and cleared by blocks the control queue enqueues, so the pipeline is
+    // freed only after the drain that might be reading it.
     std::unique_ptr<RepeatingTimer> delivering;
+    CallPipeline* draining = nullptr;
     uint64_t reportedOverflows = 0;
 };
 
@@ -297,12 +300,13 @@ CallCapture::CallCapture(CallCaptureOptions options, Frames frames, Events event
 CallCapture::~CallCapture()
 {
     Stop();
-    dispatch_sync(delivery_, ^{});
     dispatch_sync(control_, ^{
         alive_->store(false);
         state_->observation.reset();
         ReleasePipeline();
     });
+    // Waits for the release, and for any drain or event still queued.
+    dispatch_sync(delivery_, ^{});
 }
 
 CallStart CallCapture::Start()
@@ -317,6 +321,8 @@ CallStart CallCapture::Start()
         ReleasePipeline();
         s.pipeline = std::make_unique<CallPipeline>(options_.outputRate, timing_.ringSeconds);
         sink_->pipeline.store(s.pipeline.get());
+        CallPipeline* started = s.pipeline.get();
+        dispatch_async(delivery_, ^{ state_->draining = started; });
         s.microphoneUID = options_.microphoneUID.empty() ? environment_->DefaultMicrophone()
                                                          : options_.microphoneUID;
         s.withTap = false;
@@ -467,12 +473,17 @@ void CallCapture::ReleasePipeline()
     if (!s.pipeline) {
         return;
     }
-    if (sink_->Detach()) {
-        s.pipeline.reset();
-    } else {
-        // A reader never left; leaking one pipeline beats freeing it under that reader.
-        (void)s.pipeline.release();
-    }
+    const bool detached = sink_->Detach();
+    CallPipeline* released = s.pipeline.release();
+    // A drain may be reading it on the delivery queue, so it is freed there, after that
+    // drain. When an IO reader never left, leaking one pipeline beats freeing it under that
+    // reader.
+    dispatch_async(delivery_, ^{
+        state_->draining = nullptr;
+        if (detached) {
+            delete released;
+        }
+    });
 }
 
 void CallCapture::StopBackend()
@@ -612,7 +623,7 @@ void CallCapture::Tick()
 void CallCapture::DrainDelivery()
 {
     State& s = *state_;
-    CallPipeline* pipeline = s.pipeline.get();
+    CallPipeline* pipeline = s.draining;
     if (!pipeline) {
         return;
     }
