@@ -14,7 +14,7 @@ Tell the other side you're recording; consent rules depend on where they are.
 
 ## Split mode for recorders
 
-A new mix of a microphone and System audio starts with **Split by channel** on: your voice on the left channel, the call on the right. A recorder that keeps channels apart can then tell who said what. [Voice](https://spashii.github.io/voice/) uses split mode to transcribe each side. Change it in **Settings → (your mix) → Sources → Split by channel**. The switch only appears when a mix has exactly two sources.
+A new mix of a microphone and System audio starts with **Split by channel** on: your voice on the left channel, the call on the right. A recorder that keeps channels apart can then tell who said what. [Voice](https://spashii.github.io/dictate/) uses split mode to transcribe each side. Change it in **Settings → (your mix) → Sources → Split by channel**. The switch only appears when a mix has exactly two sources.
 
 Apps that read only one channel hear only the first source of a split mix. That is why the call app should not read this mix.
 
