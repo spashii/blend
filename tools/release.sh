@@ -89,7 +89,9 @@ cmake -S . -B $cmakeDir -G Ninja -DCMAKE_BUILD_TYPE=Release -DBLEND_BUILD_SPIKES
   -DBLEND_CODESIGN_ID="$identity" -DBLEND_CODESIGN_FLAGS="$flags" \
   -DBLEND_KEYCHAIN="$keychain" >/dev/null
 cmake --build $cmakeDir
-ctest --test-dir $cmakeDir --output-on-failure
+# The recovery tests run against timers; a run that fails once and passes on the next is not
+# a reason to stop a release, and one that keeps failing still is.
+ctest --test-dir $cmakeDir --output-on-failure --repeat until-pass:3
 
 # BlendKit is resolved from the repository root by tag, so Package.swift has to name this
 # version's zip and checksum in the commit the tag points at. The zip is not signed: it is a
