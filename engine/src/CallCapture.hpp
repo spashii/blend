@@ -82,6 +82,8 @@ struct CallCaptureTiming
     // Seconds. The defaults are the ones that ship; a test shortens them.
     double tick = 1;
     double retry = 2;
+    // Retrying the call tap beside a working microphone backs off up to this.
+    double retryCeiling = 60;
     double microphoneLostAfter = 10;
     double silentAfter = 3;
     // No frames for this long while running restarts the capture; 0 turns it off.

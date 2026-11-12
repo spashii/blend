@@ -412,6 +412,8 @@ struct World
 {
     std::atomic<bool> tapBlocked{false};
     std::atomic<bool> micBroken{false};
+    // The tap can be tapped alone but not beside the microphone.
+    std::atomic<bool> jointFails{false};
     std::atomic<bool> playing{true};
     std::atomic<bool> callTone{true};
     std::atomic<double> rate{48000};
@@ -463,7 +465,7 @@ public:
 
     bool Start(FrameSink& sink) override
     {
-        if (world_.micBroken || (request_.callTap && world_.tapBlocked)) {
+        if (world_.micBroken || (request_.callTap && (world_.tapBlocked || world_.jointFails))) {
             return false;
         }
         rate_ = world_.rate;
@@ -782,6 +784,33 @@ void RecoveryTests()
             "Call is back after the tap is restored", Rms(stream.call, stream.call.size() - 4800, 4800));
         Check(stream.me.size() > 48000 * 1.2, "the stream kept pace with the clock",
             double(stream.me.size()));
+    });
+
+    WithinTime("a tap that cannot join the microphone backs off", 20, [] {
+        World world;
+        Stream stream;
+        CallCaptureTiming timing = FastTiming();
+        timing.retryCeiling = 0.5;
+        auto capture = MakeCapture(world, stream, timing);
+        capture->Start();
+        Sleep(200);
+        world.jointFails = true;
+        world.Trigger(SystemChange::ServiceRestarted);
+        Sleep(200);
+        const int before = world.starts;
+        Sleep(1500);
+        // Every try restarts the microphone's capture; at the fixed 60 ms there would be 25.
+        const int tries = world.starts - before;
+        Check(tries <= 8, "the microphone is not restarted every retry interval", tries);
+        const int quiet = world.starts;
+        world.Trigger(SystemChange::Devices);
+        Sleep(300);
+        Check(world.starts > quiet, "a system change tries the tap at once", world.starts - quiet);
+        world.jointFails = false;
+        world.Trigger(SystemChange::Devices);
+        Sleep(400);
+        Check(stream.EventIndex("callTapRestored") >= 0, "the tap comes back when it can");
+        capture->Stop();
     });
 
     WithinTime("silence is reported while the app plays", 20, [] {

@@ -256,6 +256,9 @@ struct CallCapture::State
     double missingSince = -1;
     double lastAttempt = 0;
     double lastTapTry = 0;
+    // How long to leave the call tap alone after a try that could not start it beside the
+    // microphone; each such try bounces the microphone's capture, so it grows.
+    double tapDelay = 0;
     double lastTick = 0;
     double stalledFor = 0;
     uint64_t lastPushes = 0;
@@ -330,6 +333,7 @@ CallStart CallCapture::Start()
         s.missingSince = -1;
         s.restarts = 0;
         s.silence.Reset();
+        s.tapDelay = timing_.retry;
         if (!s.microphoneUID.empty() && StartBackend(true)) {
             result = CallStart::Started;
         } else if (!s.microphoneUID.empty() && StartBackend(false)) {
@@ -353,6 +357,9 @@ CallStart CallCapture::Start()
             if (!now.running) {
                 return;
             }
+            // Something changed that the tap might have been waiting for.
+            now.tapDelay = timing_.retry;
+            now.lastTapTry = 0;
             if (change == SystemChange::Processes && now.backend) {
                 now.backend->RefreshProcesses();
             }
@@ -518,7 +525,7 @@ void CallCapture::Reconcile(bool force)
             microphoneCause = true;
         } else if (!s.withTap) {
             // The tap alone can be tried without touching the microphone's capture.
-            if (now - s.lastTapTry < timing_.retry) {
+            if (now - s.lastTapTry < s.tapDelay) {
                 return;
             }
             s.lastTapTry = now;
@@ -537,6 +544,7 @@ void CallCapture::Reconcile(bool force)
     if (wanted.empty()) {
         // No input device now: wait for one.
     } else if (StartBackend(true)) {
+        s.tapDelay = timing_.retry;
         if (s.tapLost) {
             s.tapLost = false;
             s.silence.Reset();
@@ -544,6 +552,7 @@ void CallCapture::Reconcile(bool force)
         }
     } else if (StartBackend(false)) {
         s.lastTapTry = now;
+        s.tapDelay = s.tapLost ? std::min(s.tapDelay * 2, timing_.retryCeiling) : timing_.retry;
         s.silence.Reset();
         if (!s.tapLost) {
             s.tapLost = true;
