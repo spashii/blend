@@ -18,7 +18,7 @@ tools/build.sh
 open build/app/Build/Products/Debug/Blend.app
 ```
 
-`tools/build.sh` builds the driver and the engine with CMake, generates the Xcode project from `app/project.yml` with XcodeGen, and builds the app with the driver inside it. Install the driver from Blend's Setup page.
+`tools/build.sh` builds the driver and the engine with CMake, which also packs the engine into `kit/BlendKitCore.xcframework` (git-ignored) for the `kit` Swift package that the app and `swift test --package-path kit` use. It then generates the Xcode project from `app/project.yml` with XcodeGen, and builds the app with the driver inside it. Install the driver from Blend's Setup page.
 
 To install the driver without a password prompt on every change, run `sudo tools/dev-setup.sh` once. It installs a small root-owned helper and a sudoers rule for it, after which `tools/build.sh --install-driver` installs the freshly built driver and restarts coreaudiod. The tradeoff: any process running as you can then install that build folder's driver as root. `sudo tools/dev-teardown.sh` removes the helper, the rule, the driver and the development keychain.
 

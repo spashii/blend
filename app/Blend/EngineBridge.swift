@@ -1,3 +1,4 @@
+import BlendKitCore
 import Foundation
 import Observation
 

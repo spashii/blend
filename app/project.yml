@@ -11,9 +11,12 @@ settings:
     # tools/build.sh and tools/release.sh set these from the VERSION file.
     MARKETING_VERSION: "0.0.0"
     CURRENT_PROJECT_VERSION: "1"
-    # Where CMake put the engine library and the driver.
+    # Where CMake put the driver.
     BLEND_BUILD_DIR: $(SRCROOT)/../build
 packages:
+  # The engine as a binary framework, built by CMake into kit/ before Xcode runs.
+  BlendKit:
+    path: ../kit
   # Updates: checks the appcast on the website and installs signed releases.
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
@@ -24,7 +27,7 @@ targets:
     platform: macOS
     sources:
       - path: Blend
-        excludes: ["*.h", "*.entitlements", "*.sh"]
+        excludes: ["*.entitlements", "*.sh"]
       # Run as root when the driver is installed or removed.
       - path: Blend/restart-audio.sh
         buildPhase: resources
@@ -68,10 +71,6 @@ targets:
         # for macOS 26 and an AppIcon.icns for macOS 15; XcodeGen types it wrapper.icon,
         # which Xcode still routes to actool.
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        SWIFT_OBJC_BRIDGING_HEADER: Blend/Blend-Bridging-Header.h
-        HEADER_SEARCH_PATHS: $(SRCROOT)/../engine/include
-        LIBRARY_SEARCH_PATHS: $(BLEND_BUILD_DIR)/engine $(BLEND_BUILD_DIR)/webrtc/lib
-        OTHER_LDFLAGS: -lBlendEngine -lwebrtc-apm -lc++
         # Ad hoc ("Sign to Run Locally") unless the build scripts pass an identity. The
         # hardened runtime is on so the same build can be notarized.
         CODE_SIGN_STYLE: Manual
@@ -104,6 +103,7 @@ targets:
           ditto "$src" "$dst"
     dependencies:
       - package: Sparkle
+      - package: BlendKit
       - sdk: CoreAudio.framework
       - sdk: AVFoundation.framework
       - sdk: AudioToolbox.framework

@@ -7,7 +7,8 @@ FetchContent_MakeAvailable(json)
 # WebRTC's audio processing (echo cancellation), as packaged by freedesktop.org and built
 # with Meson. Its abseil dependency is always built from source, never taken from the
 # system, so Blend.app depends on nothing outside its bundle. Everything ends up in one
-# archive, libwebrtc-apm.a, which the Xcode build links next to libBlendEngine.a.
+# archive, libwebrtc-apm.a, which kit/CMakeLists.txt merges with libBlendEngine.a into the
+# XCFramework the app links.
 include(ExternalProject)
 set(WEBRTC_PREFIX "${CMAKE_BINARY_DIR}/webrtc")
 set(WEBRTC_SOURCE "${CMAKE_BINARY_DIR}/webrtc-src")
