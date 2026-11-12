@@ -68,9 +68,10 @@ Probes::~Probes()
         listener_.reset();
         probes_.clear();
     });
+    std::vector<std::shared_ptr<Probe>> old;
     {
         std::lock_guard lock(mutex_);
-        published_.clear();
+        old.swap(published_);
     }
 }
 
@@ -84,10 +85,14 @@ void Probes::Set(std::vector<Target> targets)
             probe->tap.Start(*probe);
             probes_.push_back(probe);
         }
+        // The last reference to an old probe stops its tap, which takes a while; that must
+        // not happen while Levels, on a UI thread, waits for the mutex.
+        std::vector<std::shared_ptr<Probe>> old = probes_;
         {
             std::lock_guard lock(mutex_);
-            published_ = probes_;
+            old.swap(published_);
         }
+        old.clear();
         if (probes_.empty()) {
             listener_.reset();
         } else if (!listener_) {
