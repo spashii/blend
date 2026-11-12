@@ -123,7 +123,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <style>
   :root {
-    --bg: #f7f7f8; --card: #fff; --fg: #0b0b0c; --muted: #6b6b73; --line: #e8e8ea;
+    --bg: #f7f7f8; --card: #fff; --fg: #0b0b0c; --app-muted: #6b6b73; --line: #e8e8ea;
     --accent: #1f5fe0; --button: #2563eb; --green: #34c759; --glass: rgba(255,255,255,.62); --frame: #e9e9ed;
     --ring: 0 2px 6px rgba(0,0,0,.06), 0 0 0 1px rgba(0,0,0,.05);
     --ring-lg: 0 30px 60px -28px rgba(16,24,40,.3), 0 0 0 1px rgba(0,0,0,.05);
@@ -131,7 +131,7 @@
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --accent: #7aa8ff; --bg: #111113; --card: #1c1c1f; --fg: #f2f2f4; --muted: #9a9aa3; --line: #2c2c31;
+      --accent: #7aa8ff; --bg: #111113; --card: #1c1c1f; --fg: #f2f2f4; --app-muted: #9a9aa3; --line: #2c2c31;
       --glass: rgba(28,28,31,.6); --frame: #1f1f23;
       --ring: 0 2px 6px rgba(0,0,0,.3), 0 0 0 1px rgba(255,255,255,.07);
       --ring-lg: 0 30px 60px -28px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.08);
@@ -140,16 +140,16 @@
   * { box-sizing: border-box; margin: 0; font-weight: 400; font-style: normal; }
   html { scroll-padding-top: 88px; }
 
-  /* Four text styles only: h1, h2, h3 and body. Links underline only on hover. */
+  /* Four text styles only: h1, h2, h3 and body, in one text colour. Links underline only on hover and focus. The primary button is the only coloured element. Drawings of the app (.demo, .art) keep the app's own colours and sizes, through the --app-* tokens. */
   body { background: var(--bg); color: var(--fg); font: 17px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
   h1 { font-size: 56px; line-height: 1.05; letter-spacing: -.035em; font-weight: 700; }
   h2 { font-size: 28px; line-height: 1.2; letter-spacing: -.02em; font-weight: 600; }
-  h3 { font-size: 17px; line-height: 1.4; letter-spacing: -.01em; font-weight: 600; }
+  h3 { font-size: 21px; line-height: 1.4; letter-spacing: -.01em; font-weight: 600; }
   a { color: inherit; text-decoration: none; }
-  a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
-  a:hover { text-decoration: underline; }
-  p a { color: var(--accent); }
-  .muted { color: var(--muted); }
+  a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; border-radius: 6px; }
+  a { text-underline-offset: 3px; }
+  a:hover, a:focus-visible { text-decoration: underline; }
+  .app-muted { color: var(--app-muted); }
   /* Spacing scale: 8 inside a group, 16 between related items, 24 to 32 within a section, --section between sections. */
   :root { --section: 112px; }
   main { max-width: 960px; margin: 0 auto; padding: 0 24px var(--section); }
@@ -157,31 +157,25 @@
 
   .nav { position: fixed; z-index: 10; top: 12px; left: 50%; transform: translateX(-50%); width: min(912px, calc(100% - 24px)); display: flex; align-items: center; gap: 16px; padding: 8px 8px 8px 14px; border-radius: 16px; background: var(--glass); -webkit-backdrop-filter: saturate(180%) blur(18px); backdrop-filter: saturate(180%) blur(18px); box-shadow: var(--ring); }
   .brand { display: flex; align-items: center; gap: 8px; }
-  .brand:hover { text-decoration: none; }
-  .brand img { width: 24px; height: 24px; }
+    .brand img { width: 24px; height: 24px; }
   .nav .links { margin-left: auto; display: flex; align-items: center; gap: 16px; }
-  .nav .links > a:not(.button) { color: var(--muted); }
 
   .button { display: inline-block; padding: 12px 20px; border-radius: 12px; }
-  .button:hover { text-decoration: none; }
+  .button:hover, .button:focus-visible { text-decoration: none; }
   .button.primary { background: var(--button); color: #fff; }
-  .button.outline { box-shadow: inset 0 0 0 1.5px var(--line); }
-  .button.outline:hover { box-shadow: inset 0 0 0 1.5px var(--muted); }
   .button.small { padding: 6px 14px; border-radius: 10px; }
 
   .hero { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; padding-top: 136px; }
   .lede { margin-top: 24px; max-width: 36ch; }
-  .dictate { display: flex; align-items: center; gap: 16px; margin-top: 24px; flex-wrap: wrap; }
-  .dictate p { flex: 1 1 240px; max-width: 340px; font-size: 15px; line-height: 1.4; }
-  .dictate .button { flex: 0 0 auto; }
-  .actions { display: flex; gap: 16px; margin-top: 32px; flex-wrap: wrap; }
+  .dictate { margin-top: 24px; max-width: 44ch; }
+  .actions { display: flex; align-items: center; gap: 24px; margin-top: 32px; flex-wrap: wrap; }
   .meta { margin-top: 16px; }
 
   /* Hero demo: a call plays into a mix while a dictation app transcribes both sides. */
   .demo { position: relative; width: 100%; max-width: 440px; justify-self: center; }
   .card { background: var(--card); border-radius: 16px; box-shadow: var(--ring-lg); padding: 16px 18px; }
   .card header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
-  .card header .status { color: var(--muted); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .card header .status { color: var(--app-muted); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
   .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
   .rec { width: 8px; height: 8px; border-radius: 50%; background: #ff3b30; animation: blink 1.2s infinite; }
   @keyframes blink { 50% { opacity: .3; } }
@@ -197,7 +191,7 @@
   .transcript { margin: -8px 0 0 20px; position: relative; min-height: 196px; }
   .line { display: flex; gap: 10px; margin-top: 8px; opacity: 0; transform: translateY(4px); transition: opacity .3s, transform .3s; }
   .line.on { opacity: 1; transform: none; }
-  .line .who { flex: 0 0 40px; color: var(--muted); }
+  .line .who { flex: 0 0 40px; color: var(--app-muted); }
   .line.you .who { color: var(--accent); }
   .caret::after { content: ""; display: inline-block; width: 1.5px; height: 1em; margin-left: 1px; vertical-align: -2px; background: var(--fg); animation: blink 1s steps(1) infinite; }
 
@@ -205,20 +199,20 @@
   .shots figure { margin: 0; }
   .frame { position: relative; aspect-ratio: 4 / 3; border-radius: 16px; background: var(--frame); }
   .frame img { position: absolute; inset: 20px; width: calc(100% - 40px); height: calc(100% - 40px); object-fit: contain; filter: drop-shadow(0 8px 16px rgba(0,0,0,.18)); }
-  .shots figcaption { margin-top: 16px; color: var(--muted); }
+  .shots figcaption { margin-top: 16px; }
 
   .why, .bottom { max-width: 640px; }
 
   .points { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
   .point { background: var(--card); border-radius: 16px; box-shadow: var(--ring); padding: 24px; }
-  .point p { margin-top: 8px; color: var(--muted); }
+  .point p { margin-top: 8px; }
   .art { height: 132px; margin-bottom: 24px; padding: 14px 16px; border-radius: 12px; background: var(--frame); display: flex; flex-direction: column; justify-content: center; gap: 8px; overflow: hidden; }
   .art .row { display: flex; align-items: center; gap: 10px; }
-  .art .row > span:first-child { flex: 0 0 64px; color: var(--muted); }
+  .art .row > span:first-child { flex: 0 0 64px; color: var(--app-muted); }
   .art .bar { position: relative; flex: 1; height: 6px; border-radius: 3px; background: var(--line); }
   .art .bar span { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--green); }
-  .art .bar .was { background: none; box-shadow: inset 0 0 0 1px var(--muted); opacity: .5; }
-  .art .tag { color: var(--muted); }
+  .art .bar .was { background: none; box-shadow: inset 0 0 0 1px var(--app-muted); opacity: .5; }
+  .art .tag { color: var(--app-muted); }
   .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 6px; }
   .switch { flex: 0 0 auto; position: relative; width: 38px; height: 22px; border-radius: 11px; background: var(--line); }
   .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
@@ -229,7 +223,7 @@
   .menu .picked { background: var(--button); color: #fff; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .chip { padding: 4px 12px; border-radius: 999px; background: var(--card); box-shadow: var(--ring); white-space: nowrap; }
-  .chip.out { color: var(--muted); text-decoration: line-through; box-shadow: inset 0 0 0 1px var(--line); background: none; }
+  .chip.out { color: var(--app-muted); text-decoration: line-through; box-shadow: inset 0 0 0 1px var(--line); background: none; }
 
 
   .faq { max-width: 640px; }
@@ -237,34 +231,30 @@
   .faq details { border-bottom: 1px solid var(--line); }
   .faq summary { display: flex; justify-content: space-between; gap: 16px; padding: 16px 0; cursor: pointer; list-style: none; }
   .faq summary::-webkit-details-marker { display: none; }
-  .faq summary::after { content: "+"; color: var(--muted); }
+  .faq summary::after { content: "+"; }
   .faq details[open] summary::after { content: "\2212"; }
-  .faq details p { padding-bottom: 16px; color: var(--muted); }
-  .bottom p { color: var(--muted); }
+  .faq details p { padding-bottom: 16px; }
   .bottom .actions { margin-top: 32px; }
   .brew { margin-top: 32px; }
   .cmd { position: relative; margin-top: 8px; border-radius: 12px; background: var(--card); box-shadow: var(--ring); }
-  .cmd pre { margin: 0; padding: 14px 88px 14px 16px; overflow-x: auto; font: 15px/1.6 ui-monospace, "SF Mono", Menlo, monospace; color: var(--fg); }
+  .cmd pre { margin: 0; padding: 14px 88px 14px 16px; overflow-x: auto; font: 17px/1.6 ui-monospace, "SF Mono", Menlo, monospace; color: var(--fg); }
   .copy { position: absolute; top: 8px; right: 8px; padding: 4px 12px; border: 0; border-radius: 8px; font: inherit; color: var(--fg); background: var(--frame); cursor: pointer; }
-  .copy:hover { box-shadow: inset 0 0 0 1px var(--muted); }
-  footer.site { max-width: 960px; margin: 0 auto; border-top: 1px solid var(--line); padding: 32px 24px 48px; color: var(--muted); }
+  .copy:hover, .copy:focus-visible { box-shadow: inset 0 0 0 1px var(--fg); }
+  footer.site { max-width: 960px; margin: 0 auto; border-top: 1px solid var(--line); padding: 32px 24px 48px; }
   footer.site .work { display: grid; gap: 16px; margin: 24px 0 32px; max-width: 640px; }
-  footer.site .work .point { display: flex; gap: 16px; align-items: flex-start; color: var(--fg); }
-  footer.site .work h3 { color: var(--fg); }
+  footer.site .work .point { display: flex; gap: 16px; align-items: flex-start; }
   footer.site .work img { flex: 0 0 auto; border-radius: 12px; }
-  footer.site .work .point:hover { text-decoration: none; box-shadow: inset 0 0 0 1.5px var(--muted); }
-  footer.site .work .point:hover h3 { text-decoration: underline; }
-  footer.site a { color: var(--fg); }
-  footer.site h2 { color: var(--fg); }
+  footer.site .work .point:hover, footer.site .work .point:focus-visible { text-decoration: none; box-shadow: inset 0 0 0 1.5px var(--fg); }
+  footer.site .work .point:hover h3, footer.site .work .point:focus-visible h3 { text-decoration: underline; text-underline-offset: 3px; }
 
   @media (max-width: 780px) {
     :root { --section: 72px; }
     .hero { grid-template-columns: 1fr; gap: 48px; padding-top: 104px; }
     h1 { font-size: 42px; }
-    .hero .actions { gap: 8px; }
-    .hero .actions .button { padding: 12px 13px; }
+    .hero .actions { gap: 16px; }
     .dictate { margin-top: 16px; }
     h2 { font-size: 24px; }
+    h3 { font-size: 20px; }
     .shots, .points { grid-template-columns: 1fr; }
     .transcript { margin-left: 16px; }
   }
@@ -284,25 +274,22 @@
   <section class="hero">
     <div>
       <h1>Build your own mic.</h1>
-      <p class="lede muted">A local dictation app only hears your microphone, so with headphones on it never hears the call. Blend Mic mixes your voice and the call into one mic, so a dictation app like Handy or OpenSuperWhisper transcribes both sides on your Mac.</p>
+      <p class="lede">A local dictation app only hears your microphone, so with headphones on it never hears the call. Blend Mic mixes your voice and the call into one mic, so a dictation app like Handy or OpenSuperWhisper transcribes both sides on your Mac.</p>
       <div class="actions">
         <a class="button primary" href="https://github.com/spashii/blend/releases/latest/download/Blend.dmg">Download for Mac</a>
-        <a class="button outline" href="https://github.com/spashii/blend/releases">GitHub releases</a>
+        <a href="https://github.com/spashii/blend/releases">GitHub releases</a>
       </div>
-      <div class="dictate">
-        <p class="muted">Looking for dictation, or a way to transcribe your calls with Blend Mic? Try Dictate.</p>
-        <a class="button outline" href="https://spashii.github.io/dictate/?utm_source=blend&amp;utm_medium=website&amp;utm_campaign=hero">Get Dictate</a>
-      </div>
-      <p class="meta muted">Free and open source (MIT) · Apple silicon, macOS 15 or later</p>
+      <p class="meta">Free and open source (MIT) · Apple silicon, macOS 15 or later</p>
+      <p class="dictate"><a href="https://spashii.github.io/dictate/?utm_source=blend&amp;utm_medium=website&amp;utm_campaign=hero">Looking for dictation, or a way to transcribe your calls with Blend Mic? Try Dictate.</a></p>
     </div>
 
     <div class="demo" role="img" aria-label="A Blend Mic mix of your microphone and the call in Google Chrome, heard on AirPods, while a dictation app transcribes both sides">
       <div class="card">
         <header><h3>Blend Mic (Calls)</h3><span class="status"><span class="dot"></span>in use</span></header>
-        <p class="hint muted">A new mic, made of:</p>
+        <p class="hint app-muted">A new mic, made of:</p>
         <div class="source"><div class="name">MacBook Pro Microphone</div><div class="slider"><span class="fill" style="width:80%"></span><span class="knob" style="left:80%"></span></div><div class="meter"><span class="level" id="m-you"></span></div></div>
-        <div class="source"><div class="name">Google Chrome <span class="muted">the call</span></div><div class="slider"><span class="fill" style="width:65%"></span><span class="knob" style="left:65%"></span></div><div class="meter"><span class="level" id="m-call"></span></div></div>
-        <div class="ears muted">You hear the call on AirPods Pro</div>
+        <div class="source"><div class="name">Google Chrome <span class="app-muted">the call</span></div><div class="slider"><span class="fill" style="width:65%"></span><span class="knob" style="left:65%"></span></div><div class="meter"><span class="level" id="m-call"></span></div></div>
+        <div class="ears app-muted">You hear the call on AirPods Pro</div>
       </div>
       <div class="card transcript">
         <header><h3>Your dictation app (using Blend Mic)</h3><span class="status"><span class="rec"></span></span></header>
@@ -406,7 +393,7 @@
     <p>Your audio never leaves your Mac, and there are no accounts. Blend Mic checks for updates once a day, and the update server counts those checks by app, version and country and never stores your IP address. This page counts visits with Cloudflare Web Analytics, without cookies.</p>
     <div class="actions">
       <a class="button primary" href="https://github.com/spashii/blend/releases/latest/download/Blend.dmg">Download for Mac</a>
-      <a class="button outline" href="https://github.com/spashii/blend/releases">GitHub releases</a>
+      <a href="https://github.com/spashii/blend/releases">GitHub releases</a>
     </div>
     <div class="brew">
       <p>Or with Homebrew:</p>
@@ -427,7 +414,7 @@ brew install --cask blend</pre><button type="button" class="copy" data-copy="bre
     <a class="point" href="https://spashii.github.io/dictate/?utm_source=blend&amp;utm_medium=website&amp;utm_campaign=other-work">
       <img src="icons/dictate.svg" alt="" width="52" height="52">
       <div><h3>Dictate</h3>
-      <p>Live transcripts of your online calls, made on your Mac. It records calls on its own.</p></div>
+      <p>Dictation and call recording for Mac. It runs on your Mac, and no bot joins the call.</p></div>
     </a>
   </div>
   <p>Made by <a href="https://github.com/spashii">spashii</a>. <a href="https://github.com/spashii/blend">Source on GitHub</a></p>
