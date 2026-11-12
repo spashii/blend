@@ -132,18 +132,32 @@ inline Microphone Mic(const AudioBufferList* input, uint32_t micChannels, bool r
 }
 
 // The same aggregate when the tap's channel count is known: it sits after the microphone's
-// channels, or after the buffers' first channels when their total is not what the two add
-// up to, as for any tap (see Tap). The microphone is still the first channel.
+// channels, or, when the buffers' total is not what the two add up to, at the last channels
+// (see Tap), but never over the microphone's own, which would feed the microphone to its
+// own echo canceller as the far end and, in a call recording, make Call a copy of Me. With
+// no channel left after the microphone's there is no reference: `left` and `right` are
+// empty, as for a capture without one. The microphone is still the first channel.
 inline Microphone MicTap(const AudioBufferList* input, uint32_t micChannels, uint32_t tapChannels)
 {
     Microphone route{ChannelAt(input, 0), {}, {}};
     if (!route.mic) {
         return route;
     }
-    const TapSpan tap = Tap(TotalChannels(input), micChannels, tapChannels);
+    const uint32_t total = TotalChannels(input);
+    TapSpan tap = Tap(total, micChannels, tapChannels);
     route.mismatch = tap.mismatch;
-    route.left = ChannelAt(input, tap.span.first);
-    route.right = tap.span.count == 1 ? route.left : ChannelAt(input, tap.span.first + 1);
+    uint32_t first = tap.span.first;
+    uint32_t count = tap.span.count;
+    if (tap.mismatch) {
+        const uint32_t left = total > micChannels ? total - micChannels : 0;
+        count = std::min(count, left);
+        first = total - count;
+    }
+    if (count == 0) {
+        return route;
+    }
+    route.left = ChannelAt(input, first);
+    route.right = count == 1 ? route.left : ChannelAt(input, first + 1);
     if (!route.right) {
         route.right = route.left;
     }

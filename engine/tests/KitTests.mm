@@ -385,11 +385,24 @@ void LayoutTests()
             "a mono tap stands for both sides");
     }
     {
-        // The device reports more input channels than the buffers carry.
+        // The device reports more input channels than the buffers carry: the tap is what
+        // is left after the microphone's channels, never the microphone's own.
         Buffers input({4});
         const auto route = routing::MicTap(input.list, 3, 2);
-        Check(route.mismatch && route.mic[0] == 1 && route.left[0] == 3 && route.right[0] == 4,
-            "a layout that does not add up takes the last tap channels and is counted");
+        Check(route.mismatch && route.mic[0] == 1 && route.left[0] == 4 && route.right[0] == 4,
+            "a layout that does not add up takes the channels left after the microphone's");
+    }
+    {
+        Buffers input({3});
+        const auto route = routing::MicTap(input.list, 3, 2);
+        Check(route.mismatch && route.mic[0] == 1 && !route.left && !route.right,
+            "no channel left after the microphone's means no echo reference");
+    }
+    {
+        Buffers input({2});
+        const auto route = routing::MicTap(input.list, 3, 2);
+        Check(route.mismatch && !route.left && !route.right,
+            "fewer channels than the microphone's has no reference either");
     }
 }
 
