@@ -91,7 +91,10 @@ public:
     }
     bool Start(double, uint32_t) override { return true; }
     void Stop() override {}
-    void Feed(const AudioBufferList* input) { Produce(input); }
+    void Feed(const AudioBufferList* input, blend::routing::ChannelSpan span = {})
+    {
+        Produce(input, span);
+    }
 };
 
 bool SameBytes(const std::vector<float>& a, const std::vector<float>& b)
@@ -118,6 +121,64 @@ void CheckProduce(const char* what, std::vector<uint32_t> layout, uint32_t left,
     Check(SameBytes(Drain(source), Expected(left, right, 300)), what);
 }
 
+// A tap's channels sit after the clock device's own inputs. `device` and `tap` are the
+// channel counts the capture knows; left and right are the channels expected in the ring.
+void CheckTap(const char* what, std::vector<uint32_t> layout, uint32_t device, uint32_t tap,
+    uint32_t left, uint32_t right, bool mismatch = false)
+{
+    TestSource source;
+    Buffers input(layout, 300);
+    const auto route = blend::routing::Tap(blend::routing::TotalChannels(input.list), device, tap);
+    source.Feed(input.list, route.span);
+    Check(SameBytes(Drain(source), Expected(left, right, 300)) && route.mismatch == mismatch,
+        what);
+}
+
+void TapTests()
+{
+    // A headset's microphone is a device input channel, so the tap comes after it.
+    CheckTap("mono headset, stereo tap: the tap's two channels", {1, 2}, 1, 2, 1, 2);
+    CheckTap("mono headset, mono tap: the tap on both sides", {1, 1}, 1, 1, 1, 1);
+    CheckTap("stereo headset input, stereo tap", {4}, 2, 2, 2, 3);
+    CheckTap("stereo headset input, planar buffers", {2, 2}, 2, 2, 2, 3);
+    CheckTap("mono headset, interleaved with the tap", {3}, 1, 2, 1, 2);
+    CheckTap("mono headset, one buffer per channel", {1, 1, 1}, 1, 2, 1, 2);
+    CheckTap("speakers have no input: the tap is first", {2}, 0, 2, 0, 1);
+    CheckTap("a mono tap on speakers is on both sides", {1}, 0, 1, 0, 0);
+    // The layout is not what was assumed: take the last tap channels, and say so.
+    CheckTap("more channels than expected: the last two", {5}, 1, 2, 3, 4, true);
+    CheckTap("fewer channels than expected: the last two", {3}, 2, 2, 1, 2, true);
+    CheckTap("one channel for a stereo tap: it is on both sides", {1}, 0, 2, 0, 0, true);
+    // The tap's format was not known: the first channels, as for a device.
+    CheckTap("unknown tap format: the first two channels", {3}, 1, 0, 0, 1);
+
+    // The tap passes its span and counts the buffers that did not match.
+    struct SpanSink : blend::FrameSink
+    {
+        void Raw(const AudioBufferList*, blend::routing::ChannelSpan s) override
+        {
+            span = s;
+            calls++;
+        }
+        blend::routing::ChannelSpan span;
+        int calls = 0;
+    } sink;
+    blend::ProcessTap tap(blend::TapTarget{"com.example.app", std::nullopt, false}, "Test");
+    tap.sink_ = &sink;
+    tap.deviceChannels_ = 1;
+    tap.tapChannels_ = 2;
+    Buffers matching({1, 2}, 64), odd({4}, 64);
+    blend::ProcessTap::IOProc(0, nullptr, matching.list, nullptr, nullptr, nullptr, &tap);
+    Check(sink.span.first == 1 && sink.span.count == 2 && tap.ChannelMismatches() == 0,
+        "the tap passes the span after the device's channels");
+    blend::ProcessTap::IOProc(0, nullptr, odd.list, nullptr, nullptr, nullptr, &tap);
+    Check(sink.span.first == 2 && sink.span.count == 2 && tap.ChannelMismatches() == 1,
+        "a layout mismatch is counted and takes the last channels");
+    blend::ProcessTap::IOProc(0, nullptr, nullptr, nullptr, nullptr, nullptr, &tap);
+    Check(sink.calls == 2, "a missing buffer list is ignored");
+    tap.sink_ = nullptr;
+}
+
 void ProduceTests()
 {
     CheckProduce("stereo interleaved: left and right as delivered", {2}, 0, 1);
@@ -126,10 +187,6 @@ void ProduceTests()
     CheckProduce("two planar buffers: one channel each", {1, 1}, 0, 1);
     CheckProduce("mono buffer then stereo buffer: the first two across buffers", {1, 2}, 0, 1);
     CheckProduce("stereo buffer then mono buffer: the first buffer's pair", {2, 1}, 0, 1);
-    // Today a device's own input channels come before a tap's: a headset's microphone is
-    // taken as the app's left side, and its first tap channel as the right.
-    CheckProduce("one device channel then a stereo tap: device and tap left", {1, 2}, 0, 1);
-    CheckProduce("one device channel then a mono tap: both from the device", {1, 1}, 0, 1);
 
     {
         TestSource source;
@@ -356,6 +413,7 @@ void MicRoutingTests()
 int main()
 {
     ProduceTests();
+    TapTests();
     MicRoutingTests();
     std::printf(failures ? "%d FAILED\n" : "all passed\n", failures);
     return failures ? 1 : 0;

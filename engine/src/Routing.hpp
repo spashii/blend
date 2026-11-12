@@ -43,17 +43,60 @@ inline Channel ChannelAt(const AudioBufferList* input, uint32_t index)
     return {};
 }
 
+// A run of channels, counted across all buffers. A count of 0 means every channel from
+// `first` on.
+struct ChannelSpan
+{
+    uint32_t first = 0;
+    uint32_t count = 0;
+};
+
+inline uint32_t TotalChannels(const AudioBufferList* input)
+{
+    uint32_t total = 0;
+    for (uint32_t b = 0; b < input->mNumberBuffers; b++) {
+        total += input->mBuffers[b].mNumberChannels;
+    }
+    return total;
+}
+
+struct TapSpan
+{
+    ChannelSpan span;
+    bool mismatch = false;
+};
+
+// Where a tap's channels are in the aggregate that carries it: after the clock device's own
+// input channels, which a headset has and speakers do not. When the buffers hold a
+// different number of channels than the two add up to, the layout is not what was
+// assumed, and the tap is taken to be the last `tapChannels` (the aggregate lists
+// subdevices before taps). A tapChannels of 0 means the tap's format was not known; the
+// span is then the first channels, as for a device.
+inline TapSpan Tap(uint32_t totalChannels, uint32_t deviceChannels, uint32_t tapChannels)
+{
+    if (tapChannels == 0) {
+        return {};
+    }
+    if (deviceChannels + tapChannels == totalChannels) {
+        return {{deviceChannels, tapChannels}, false};
+    }
+    return {{totalChannels >= tapChannels ? totalChannels - tapChannels : 0, tapChannels}, true};
+}
+
 struct Stereo
 {
     Channel left;
     Channel right;
 };
 
-// A source's left and right: its first two channels, a mono source on both sides. Both
-// are empty when there is no channel at all.
-inline Stereo FirstTwo(const AudioBufferList* input)
+// A source's left and right: the first two channels of its span, a mono source on both
+// sides. Both are empty when there is no channel at all.
+inline Stereo FirstTwo(const AudioBufferList* input, ChannelSpan span = {})
 {
-    Stereo pair{ChannelAt(input, 0), ChannelAt(input, 1)};
+    Stereo pair{ChannelAt(input, span.first), {}};
+    if (span.count != 1) {
+        pair.right = ChannelAt(input, span.first + 1);
+    }
     if (pair.left && !pair.right) {
         pair.right = pair.left;
     }

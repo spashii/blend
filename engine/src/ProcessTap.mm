@@ -40,7 +40,16 @@ ProcessTap::~ProcessTap()
 OSStatus ProcessTap::IOProc(AudioObjectID, const AudioTimeStamp*, const AudioBufferList* input,
     const AudioTimeStamp*, AudioBufferList*, const AudioTimeStamp*, void* context)
 {
-    static_cast<ProcessTap*>(context)->sink_->Raw(input);
+    auto self = static_cast<ProcessTap*>(context);
+    if (!input || input->mNumberBuffers == 0) {
+        return noErr;
+    }
+    const routing::TapSpan tap =
+        routing::Tap(routing::TotalChannels(input), self->deviceChannels_, self->tapChannels_);
+    if (tap.mismatch) {
+        self->mismatches_.fetch_add(1, std::memory_order_relaxed);
+    }
+    self->sink_->Raw(input, tap.span);
     return noErr;
 }
 
@@ -120,6 +129,11 @@ bool ProcessTap::Start(FrameSink& sink)
         Stop();
         return false;
     }
+    // The aggregate lists the clock device's own input channels before the tap's.
+    deviceChannels_ = hal::ChannelCount(output, kAudioObjectPropertyScopeInput);
+    AudioStreamBasicDescription format = {};
+    tapChannels_ = hal::Get(tap_, kAudioTapPropertyFormat, format) ? format.mChannelsPerFrame : 0;
+    mismatches_.store(0, std::memory_order_relaxed);
     sink.Prepare(hal::NominalRate(aggregate_), hal::BufferFrames(aggregate_));
     if (AudioDeviceCreateIOProcID(aggregate_, IOProc, this, &proc_) != noErr ||
         AudioDeviceStart(aggregate_, proc_) != noErr) {

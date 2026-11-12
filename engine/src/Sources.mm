@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <sstream>
 
 namespace blend {
 
@@ -85,7 +86,7 @@ Source::Stats Source::GetStats() const
     return stats;
 }
 
-void Source::Produce(const AudioBufferList* input)
+void Source::Produce(const AudioBufferList* input, routing::ChannelSpan span)
 {
     Stream* stream = stream_.load(std::memory_order_acquire);
     if (!stream || !input || input->mNumberBuffers == 0) {
@@ -96,9 +97,9 @@ void Source::Produce(const AudioBufferList* input)
     const UInt32 frames =
         std::min<UInt32>(first.mDataByteSize / (sizeof(float) * firstChannels), kMaxProduceFrames);
 
-    // Left and right come from the first two channels found across all buffers; a mono
-    // source is copied to both.
-    const routing::Stereo pair = routing::FirstTwo(input);
+    // Left and right come from the first two channels of the span, counted across all
+    // buffers; a mono source is copied to both.
+    const routing::Stereo pair = routing::FirstTwo(input, span);
     if (!pair.left) {
         return;
     }
@@ -201,6 +202,16 @@ bool AppSource::Start(double busRate, uint32_t busFrames)
 void AppSource::Stop()
 {
     tap_.Stop();
+}
+
+std::string AppSource::Detail() const
+{
+    std::ostringstream out;
+    out << " tap-channels=" << tap_.DeviceChannels() << "+" << tap_.TapChannels();
+    if (tap_.ChannelMismatches()) {
+        out << " channel-mismatches=" << tap_.ChannelMismatches();
+    }
+    return out.str();
 }
 
 // MonitorOutput

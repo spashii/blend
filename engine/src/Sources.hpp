@@ -71,8 +71,9 @@ protected:
     void Publish(double sourceRate, double busRate, uint32_t sourceFrames, uint32_t busFrames);
     // Called by Stop after the source's IO has stopped.
     void Unpublish();
-    // Source IO thread: converts any channel layout to stereo and queues it.
-    void Produce(const AudioBufferList* input);
+    // Source IO thread: converts any channel layout to stereo and queues it, from the
+    // first two channels of `span`.
+    void Produce(const AudioBufferList* input, routing::ChannelSpan span = {});
 
     const std::string key_;
     const Retire retire_;
@@ -111,7 +112,10 @@ private:
             owner_.Publish(rate, owner_.busRate_, bufferFrames, owner_.busFrames_);
         }
         void Stopped() override { owner_.Unpublish(); }
-        void Raw(const AudioBufferList* input) override { owner_.Produce(input); }
+        void Raw(const AudioBufferList* input, routing::ChannelSpan span) override
+        {
+            owner_.Produce(input, span);
+        }
         void Block(const float* me, const float*, uint32_t frames) override;
 
     private:
@@ -139,6 +143,7 @@ public:
 
     bool Start(double busRate, uint32_t busFrames) override;
     void Stop() override;
+    std::string Detail() const override;
 
     // Control queue: re-reads the process list and updates the live tap if it changed.
     void RefreshProcesses() { tap_.RefreshProcesses(); }
@@ -162,7 +167,10 @@ private:
             owner_.Publish(rate, owner_.busRate_, bufferFrames, owner_.busFrames_);
         }
         void Stopped() override { owner_.Unpublish(); }
-        void Raw(const AudioBufferList* input) override { owner_.Produce(input); }
+        void Raw(const AudioBufferList* input, routing::ChannelSpan span) override
+        {
+            owner_.Produce(input, span);
+        }
 
     private:
         AppSource& owner_;

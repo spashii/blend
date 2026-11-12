@@ -3,6 +3,8 @@
 // Where a capture delivers what it hears. Blend's own sink queues frames for the mixer;
 // other hosts can take them elsewhere without the capture code knowing.
 
+#include "Routing.hpp"
+
 #include <CoreAudio/CoreAudioTypes.h>
 
 #include <cstdint>
@@ -21,8 +23,9 @@ public:
     virtual void Stopped() {}
 
     // IO thread, which must never block, allocate or take a lock. A device's buffers as
-    // delivered, any channel layout.
-    virtual void Raw(const AudioBufferList* input) {}
+    // delivered, any channel layout. `span` is the run of channels that is the capture's
+    // audio; a tap shares its buffers with the clock device's own inputs.
+    virtual void Raw(const AudioBufferList* input, routing::ChannelSpan span) {}
     // IO thread. Mono blocks of the same length for the microphone and its echo reference,
     // sample-aligned. The reference is null when there is none.
     virtual void Block(const float* me, const float* reference, uint32_t frames) {}

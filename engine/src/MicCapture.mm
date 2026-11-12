@@ -28,7 +28,7 @@ OSStatus MicCapture::IOProc(AudioObjectID, const AudioTimeStamp*, const AudioBuf
 {
     auto self = static_cast<MicCapture*>(context);
     if (!self->processor_) {
-        self->sink_->Raw(input);
+        self->sink_->Raw(input, {});
         return noErr;
     }
     if (!input || input->mNumberBuffers == 0) {

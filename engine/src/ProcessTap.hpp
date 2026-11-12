@@ -8,6 +8,8 @@
 
 #include <CoreAudio/CoreAudio.h>
 
+#include <atomic>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -43,6 +45,12 @@ public:
     void Stop();
     bool Running() const { return proc_ != nullptr; }
 
+    // Any thread. The clock device's input channels and the tap's channels, as they sit
+    // in the aggregate's buffers, and how many buffers did not match that layout.
+    uint32_t DeviceChannels() const { return deviceChannels_; }
+    uint32_t TapChannels() const { return tapChannels_; }
+    uint64_t ChannelMismatches() const { return mismatches_.load(std::memory_order_relaxed); }
+
     // Control queue: re-reads the process list and updates the live tap if it changed.
     void RefreshProcesses();
 
@@ -65,6 +73,10 @@ private:
     std::vector<int> excludedOwners_;
     bool muted_ = false;
     FrameSink* sink_ = nullptr;
+    // Set before the IO starts, read by the IO thread.
+    uint32_t deviceChannels_ = 0;
+    uint32_t tapChannels_ = 0;
+    std::atomic<uint64_t> mismatches_{0};
     void* description_ = nullptr; // CATapDescription, retained
     AudioObjectID tap_ = kAudioObjectUnknown;
     AudioObjectID aggregate_ = kAudioObjectUnknown;
