@@ -1,11 +1,15 @@
 #!/bin/zsh
-# Builds the release disk image: tools/release.sh [--publish]
+# Builds the release disk image: tools/release.sh [--publish | --prerelease]
 #
 # Output: build/release/Blend-VERSION.dmg with Blend.app, which carries the driver, and
 # Blend.dmg, a byte-identical copy that is uploaded beside it, and BlendKitCore-VERSION.xcframework.zip,
 # the engine as a binary Swift package target, with the root Package.swift that pins its checksum.
 # --publish then uploads it as GitHub release vVERSION and pushes the update feed and the
 # Homebrew cask that point at it; it needs a clean, pushed checkout and gh logged in.
+# --prerelease builds and notarizes the same way, then uploads the disk image and the BlendKit
+# zip as GitHub pre-release vVERSION-pre.N and pushes a Package.swift that points at it, so a
+# host can pin BlendKit before the release. It leaves the update feed and the cask alone, so
+# nobody running Blend is offered it.
 # With tools/release-identity.sh set up, it signs with that Developer ID, then notarizes and
 # staples both the app and the image, so Blend opens on any Mac without a Gatekeeper
 # warning, offline too. BLEND_SIGN_ID and BLEND_NOTARY_PROFILE use an identity and a
@@ -15,16 +19,28 @@ root=${0:A:h:h}
 cd $root
 version=$(<VERSION)
 publish=false
-if [[ ${1:-} == --publish ]]; then
-  publish=true
+prerelease=false
+tag=v$version
+case ${1:-} in
+  --publish) publish=true ;;
+  --prerelease)
+    prerelease=true
+    # Each pre-release is its own tag: the release's own tag stays free, and a host pins this
+    # one exactly.
+    tag=v$version-pre.$(git rev-list --count HEAD)
+    ;;
+  "") ;;
+  *) print -u2 "usage: tools/release.sh [--publish | --prerelease]"; exit 1 ;;
+esac
+if $publish || $prerelease; then
   # The release is built from HEAD and tagged there, so HEAD has to be exactly what is on
   # GitHub; these checks fail when GitHub can't be reached, rather than passing.
   [[ -z $(git status --porcelain) ]] || { print -u2 "Commit everything first."; exit 1 }
   git fetch -q origin
   [[ $(git rev-parse HEAD) == $(git rev-parse "@{u}") ]] || { print -u2 "Push HEAD first."; exit 1 }
   gh auth status >/dev/null
-  if [[ -n $(gh release list --json tagName -q ".[] | select(.tagName == \"v$version\")") ]]; then
-    print -u2 "v$version is already released; raise VERSION."
+  if [[ -n $(gh release list --json tagName -q ".[] | select(.tagName == \"$tag\")") ]]; then
+    print -u2 "$tag is already released; raise VERSION."
     exit 1
   fi
 fi
@@ -40,6 +56,10 @@ if [[ -z ${BLEND_SIGN_ID:-} && -f $kc ]]; then
   keychain=$kc
   keychainArgs=(--keychain $kc)
   profile=${profile:-blend-notary}
+fi
+if $prerelease && [[ -z $profile ]]; then
+  print -u2 "A pre-release is notarized, so it needs the Developer ID and notarization."
+  exit 1
 fi
 out=$root/build/release
 cmakeDir=$out/cmake
@@ -82,7 +102,7 @@ cat >$root/Package.swift <<EOF
 // swift-tools-version: 6.0
 import PackageDescription
 
-// Written by tools/release.sh for $version; kit/Package.swift is the development copy.
+// Written by tools/release.sh for $tag; kit/Package.swift is the development copy.
 // BlendKitCore has no product of its own: SwiftPM would write a libBlendKitCore.a over the
 // XCFramework's, so it reaches a host through BlendKit.
 let package = Package(
@@ -94,7 +114,7 @@ let package = Package(
     targets: [
         .binaryTarget(
             name: "BlendKitCore",
-            url: "https://github.com/spashii/blend/releases/download/v$version/${kitZip:t}",
+            url: "https://github.com/spashii/blend/releases/download/$tag/${kitZip:t}",
             checksum: "$kitChecksum"),
         .target(name: "BlendKit", dependencies: ["BlendKitCore"], path: "kit/Sources/BlendKit"),
     ]
@@ -157,7 +177,7 @@ cp -f $dmg $out/Blend.dmg
 sparkle=${BLEND_SPARKLE_DIR:-$HOME/.blend-signing/sparkle-2.10.1}
 sparkleKey=${BLEND_SPARKLE_KEY:-$HOME/.blend-signing/sparkle-private-key}
 releases=${BLEND_RELEASES_URL:-https://github.com/spashii/blend/releases/download}
-if [[ -n $profile && -f $sparkleKey ]]; then
+if ! $prerelease && [[ -n $profile && -f $sparkleKey ]]; then
   signature=$($sparkle/bin/sign_update --ed-key-file $sparkleKey $dmg)
   item="    <item>
       <title>Blend Mic $version</title>
@@ -189,6 +209,13 @@ if $publish; then
   git commit -q -m "Blend $version" site/appcast.xml Casks/blend.rb
   git push -q
   echo "Published v$version."
+elif $prerelease; then
+  # The tag has to contain the Package.swift written above, as for a release.
+  git commit -q -m "build(kit): pin BlendKitCore $tag" Package.swift
+  git push -q
+  gh release create $tag $dmg $out/Blend.dmg $dmg.sha256 $kitZip --target $(git rev-parse HEAD) \
+    --prerelease --title "Blend Mic $version pre-release" --generate-notes
+  echo "Published pre-release $tag; the update feed and the cask are unchanged."
 elif [[ -n $profile && -f $sparkleKey ]]; then
   echo "Updated site/appcast.xml and Casks/blend.rb; tools/release.sh --publish uploads and pushes."
 fi
