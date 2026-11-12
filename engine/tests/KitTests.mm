@@ -412,6 +412,9 @@ struct World
 {
     std::atomic<bool> tapBlocked{false};
     std::atomic<bool> micBroken{false};
+    // Call is zeros from every backend started up to this many starts, as for a tap that
+    // an output device change killed.
+    std::atomic<int> deadTapStarts{0};
     // The tap can be tapped alone but not beside the microphone.
     std::atomic<bool> jointFails{false};
     std::atomic<bool> playing{true};
@@ -470,6 +473,7 @@ public:
         }
         rate_ = world_.rate;
         sink_ = &sink;
+        deadTap_ = world_.starts < world_.deadTapStarts;
         sink.Prepare(rate_, 480);
         world_.backends++;
         world_.starts++;
@@ -517,7 +521,7 @@ private:
             for (uint32_t i = 0; i < block; i++) {
                 const double t = double(sample + i) / rate_;
                 me[i] = float(0.2 * std::sin(2 * M_PI * 440 * t));
-                call[i] = world_.callTone ? float(0.3 * std::sin(2 * M_PI * 1000 * t)) : 0.0f;
+                call[i] = world_.callTone && !deadTap_ ? float(0.3 * std::sin(2 * M_PI * 1000 * t)) : 0.0f;
             }
             sample += block;
             sink_->Block(me.data(), request_.callTap ? call.data() : nullptr, block);
@@ -552,6 +556,7 @@ private:
     const BackendRequest request_;
     FrameSink* sink_ = nullptr;
     double rate_ = 0;
+    bool deadTap_ = false;
     std::atomic<bool> running_{false};
     std::thread thread_;
 };
@@ -826,6 +831,31 @@ void RecoveryTests()
         const int silent = stream.EventIndex("callSilent"), heard = stream.EventIndex("callHeard");
         Check(heard > silent, "callHeard follows the first sound", heard);
         capture->Stop();
+    });
+
+    WithinTime("silence rebuilds the tap once", 20, [] {
+        World world;
+        Stream stream;
+        world.deadTapStarts = 1;
+        auto capture = MakeCapture(world, stream);
+        capture->Start();
+        Sleep(900);
+        Check(stream.EventIndex("callSilent") >= 0, "the dead tap is reported");
+        Check(world.starts == 2, "and rebuilt once", world.starts);
+        Check(stream.EventIndex("callHeard") > stream.EventIndex("callSilent"),
+            "Call is heard after the rebuild");
+        Check(stream.EventIndex("microphoneRestarted") < 0,
+            "the rebuild is not a microphone restart");
+        capture->Stop();
+        // A call app that is quiet for real is not rebuilt again and again.
+        World quiet;
+        Stream quietStream;
+        quiet.callTone = false;
+        auto other = MakeCapture(quiet, quietStream);
+        other->Start();
+        Sleep(1500);
+        Check(quiet.starts == 2, "a tap that stays silent is rebuilt only once", quiet.starts);
+        other->Stop();
     });
 
     WithinTime("following the microphone", 20, [] {

@@ -252,6 +252,9 @@ struct CallCapture::State
     bool microphoneLost = false;
     bool echoFailed = false;
     bool settling = false;
+    // The tap was rebuilt for the current stretch of silence; one try, since a call app
+    // that really is quiet would otherwise bounce the microphone forever.
+    bool silenceRebuilt = false;
     std::string microphoneUID;
     double missingSince = -1;
     double lastAttempt = 0;
@@ -333,6 +336,7 @@ CallStart CallCapture::Start()
         s.missingSince = -1;
         s.restarts = 0;
         s.silence.Reset();
+        s.silenceRebuilt = false;
         s.tapDelay = timing_.retry;
         if (!s.microphoneUID.empty() && StartBackend(true)) {
             result = CallStart::Started;
@@ -509,8 +513,9 @@ void CallCapture::Emit(CallEvent event, std::string detail)
 }
 
 // Brings the running capture in line with the system: the microphone it should follow, its
-// rate, and the call tap. `force` rebuilds even when nothing looks different.
-void CallCapture::Reconcile(bool force)
+// rate, and the call tap. `force` rebuilds even when nothing looks different, and `quiet`
+// does not report that as a restarted microphone.
+void CallCapture::Reconcile(bool force, bool quiet)
 {
     State& s = *state_;
     if (!s.running) {
@@ -573,7 +578,7 @@ void CallCapture::Reconcile(bool force)
         }
         return;
     }
-    if (s.missingSince >= 0 || s.microphoneLost || microphoneCause) {
+    if (s.missingSince >= 0 || s.microphoneLost || (microphoneCause && !quiet)) {
         s.missingSince = -1;
         s.microphoneLost = false;
         Emit(CallEvent::MicrophoneRestarted);
@@ -617,8 +622,19 @@ void CallCapture::Tick()
     const bool heard = s.pipeline->TakeHeard();
     if (s.withTap) {
         switch (s.silence.Tick(heard, environment_->CallIsPlaying(), dt)) {
-        case SilenceDetector::Change::Silent: Emit(CallEvent::CallSilent); break;
-        case SilenceDetector::Change::Heard: Emit(CallEvent::CallHeard); break;
+        case SilenceDetector::Change::Silent:
+            Emit(CallEvent::CallSilent);
+            if (!s.silenceRebuilt) {
+                // A tap dies when the output device changes, and nothing else reports it.
+                s.silenceRebuilt = true;
+                Reconcile(true, true);
+                return;
+            }
+            break;
+        case SilenceDetector::Change::Heard:
+            s.silenceRebuilt = false;
+            Emit(CallEvent::CallHeard);
+            break;
         case SilenceDetector::Change::None: break;
         }
     }

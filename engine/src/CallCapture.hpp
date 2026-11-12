@@ -184,7 +184,7 @@ private:
     struct Sink;
     struct State;
 
-    void Reconcile(bool microphoneCause);
+    void Reconcile(bool force, bool quiet = false);
     void Tick();
     bool StartBackend(bool callTap);
     void StopBackend();
