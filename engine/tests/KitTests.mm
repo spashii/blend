@@ -687,6 +687,38 @@ void ThreadingTests()
         capture.reset();
     });
 
+    WithinTime("stop another capture from a callback", 10, [] {
+        World worldA, worldB;
+        Stream streamA, streamB;
+        std::atomic<CallCapture*> other{nullptr};
+        std::atomic<int> calls{0};
+        CallCaptureOptions options;
+        options.label = "first";
+        options.echo = EchoMode::Off;
+        auto a = std::make_unique<CallCapture>(options,
+            [&](const float* m, const float* c, uint32_t n, uint64_t p) {
+                streamA.Frames(m, c, n, p);
+                if (calls.fetch_add(1) == 2) {
+                    other.load()->Stop();
+                }
+            },
+            [](CallEvent, const std::string&) {}, std::make_unique<FakeEnvironment>(worldA),
+            FastTiming());
+        auto b = MakeCapture(worldB, streamB);
+        other = b.get();
+        a->Start();
+        b->Start();
+        for (int i = 0; i < 300 && worldB.backends > 0; i++) {
+            Sleep(10);
+        }
+        Check(worldB.backends == 0, "a callback can stop a different capture",
+            double(worldB.backends));
+        Check(streamB.Contiguous() && !streamB.me.empty(),
+            "the other capture delivered what it had before it stopped");
+        a->Stop();
+        other = nullptr;
+    });
+
     WithinTime("start failures", 10, [] {
         {
             World world;

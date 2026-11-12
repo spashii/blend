@@ -19,6 +19,8 @@ namespace blend {
 namespace {
 
 constexpr uint32_t kDefaultRate = 48000;
+// Tags a capture's delivery queue with the capture, so Stop can tell its own callback from
+// another capture's.
 char deliveryKey;
 
 double Now()
@@ -284,7 +286,7 @@ CallCapture::CallCapture(CallCaptureOptions options, Frames frames, Events event
     delivery_ = dispatch_queue_create((label + ".delivery").c_str(),
         dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INTERACTIVE,
             0));
-    dispatch_queue_set_specific(delivery_, &deliveryKey, &deliveryKey, nullptr);
+    dispatch_queue_set_specific(delivery_, &deliveryKey, this, nullptr);
     state_ = std::make_unique<State>(timing_.silentAfter);
     state_->ticker = std::make_unique<RepeatingTimer>(control_, Nanoseconds(timing_.tick),
         Nanoseconds(timing_.tick / 10), ^{ Tick(); });
@@ -388,7 +390,7 @@ void CallCapture::Stop()
     if (!had) {
         return;
     }
-    if (dispatch_get_specific(&deliveryKey)) {
+    if (dispatch_get_specific(&deliveryKey) == this) {
         // Called from a callback, which is in the middle of draining the queue and goes on
         // delivering what the device had already produced. The pipeline it reads stays
         // until the next Start or the destructor.
