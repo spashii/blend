@@ -38,6 +38,13 @@ target_include_directories(webrtc_apm INTERFACE
 target_compile_definitions(webrtc_apm INTERFACE WEBRTC_POSIX WEBRTC_MAC)
 add_dependencies(webrtc_apm webrtc_ext)
 
+# AddressSanitizer for the engine and its tests: cmake -DBLEND_ASAN=ON. WebRTC stays as built.
+option(BLEND_ASAN "Build the engine and its tests with AddressSanitizer" OFF)
+if(BLEND_ASAN)
+  add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
+  add_link_options(-fsanitize=address)
+endif()
+
 add_library(BlendEngine STATIC
   src/Apps.mm
   src/BlendEngine.mm

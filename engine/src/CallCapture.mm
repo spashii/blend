@@ -65,11 +65,7 @@ private:
 // Removes its listeners when destroyed. The blocks run on the queue they were added with.
 struct Listeners
 {
-    struct Entry
-    {
-        AudioObjectPropertySelector selector;
-        AudioObjectPropertyListenerBlock block;
-    };
+    using Entry = SystemListener;
     dispatch_queue_t queue;
     std::vector<Entry> entries;
 
@@ -161,17 +157,12 @@ public:
     {
         auto listeners = std::make_shared<Listeners>();
         listeners->queue = queue;
-        auto add = [&](AudioObjectPropertySelector selector, SystemChange change) {
-            AudioObjectPropertyListenerBlock block =
-                ^(UInt32, const AudioObjectPropertyAddress*) { changed(change); };
-            auto address = hal::Address(selector);
-            AudioObjectAddPropertyListenerBlock(kAudioObjectSystemObject, &address, queue, block);
-            listeners->entries.push_back({selector, block});
-        };
-        add(kAudioHardwarePropertyDevices, SystemChange::Devices);
-        add(kAudioHardwarePropertyDefaultInputDevice, SystemChange::Devices);
-        add(kAudioHardwarePropertyProcessObjectList, SystemChange::Processes);
-        add(kAudioHardwarePropertyServiceRestarted, SystemChange::ServiceRestarted);
+        for (auto& entry : SystemListenerBlocks(std::move(changed))) {
+            auto address = hal::Address(entry.selector);
+            AudioObjectAddPropertyListenerBlock(kAudioObjectSystemObject, &address, queue,
+                entry.block);
+            listeners->entries.push_back(std::move(entry));
+        }
         return listeners;
     }
 
@@ -180,6 +171,24 @@ private:
 };
 
 } // namespace
+
+std::vector<SystemListener> SystemListenerBlocks(std::function<void(SystemChange)> changed)
+{
+    std::vector<SystemListener> blocks;
+    auto add = [&](AudioObjectPropertySelector selector, SystemChange change) {
+        // Each block owns a copy: this function's argument is gone when it returns, and the
+        // blocks run for as long as they are registered.
+        std::function<void(SystemChange)> handler = changed;
+        AudioObjectPropertyListenerBlock block =
+            ^(UInt32, const AudioObjectPropertyAddress*) { handler(change); };
+        blocks.push_back({selector, block});
+    };
+    add(kAudioHardwarePropertyDevices, SystemChange::Devices);
+    add(kAudioHardwarePropertyDefaultInputDevice, SystemChange::Devices);
+    add(kAudioHardwarePropertyProcessObjectList, SystemChange::Processes);
+    add(kAudioHardwarePropertyServiceRestarted, SystemChange::ServiceRestarted);
+    return blocks;
+}
 
 std::unique_ptr<CallEnvironment> MakeCoreAudioEnvironment(const CallCaptureOptions& options)
 {

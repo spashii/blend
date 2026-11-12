@@ -932,6 +932,35 @@ void ApiTests()
     }
 }
 
+// The Core Audio environment's listeners must keep working after Observe returned and the
+// caller's std::function is gone. The blocks are run here without registering them, so no
+// device is touched.
+void ObserveTests()
+{
+    auto hits = std::make_shared<std::atomic<int>>(0);
+    auto kinds = std::make_shared<std::vector<SystemChange>>();
+    std::vector<SystemListener> listeners;
+    {
+        std::function<void(SystemChange)> changed = [hits, kinds](SystemChange change) {
+            kinds->push_back(change);
+            hits->fetch_add(1);
+        };
+        listeners = SystemListenerBlocks(std::move(changed));
+    }
+    // A listener that borrowed the function would leave the capture list as the only owner.
+    Check(hits.use_count() >= 2, "each listener owns its handler", double(hits.use_count()));
+    if (hits.use_count() < 2) {
+        return;
+    }
+    const AudioObjectPropertyAddress address = {};
+    for (auto& listener : listeners) {
+        listener.block(0, &address);
+    }
+    Check(listeners.size() == 4 && hits->load() == 4 &&
+              kinds->back() == SystemChange::ServiceRestarted,
+        "listeners run after the function they were made from is gone", double(hits->load()));
+}
+
 // Opens the real default microphone and taps a call app that is not running, to see the
 // real path start, deliver and stop. Run by hand with BLENDKIT_LIVE=1.
 void LiveTests()
@@ -971,6 +1000,7 @@ int main()
     SilenceTests();
     LayoutTests();
     ApiTests();
+    ObserveTests();
     ThreadingTests();
     RecoveryTests();
     EchoTests();

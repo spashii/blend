@@ -22,6 +22,7 @@
 #include "Capture.hpp"
 #include "MicProcessor.hpp"
 
+#include <CoreAudio/CoreAudio.h>
 #include <dispatch/dispatch.h>
 
 #include <atomic>
@@ -29,6 +30,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace blend {
 
@@ -136,6 +138,17 @@ public:
     virtual std::shared_ptr<void> Observe(dispatch_queue_t queue,
         std::function<void(SystemChange)> changed) = 0;
 };
+
+// A Core Audio property listener that reports one kind of SystemChange.
+struct SystemListener
+{
+    AudioObjectPropertySelector selector;
+    AudioObjectPropertyListenerBlock block;
+};
+
+// The listeners the Core Audio environment registers on the system object, each owning its
+// own copy of `changed`. Separate so a test can run them after the caller's copy is gone.
+std::vector<SystemListener> SystemListenerBlocks(std::function<void(SystemChange)> changed);
 
 std::unique_ptr<CallEnvironment> MakeCoreAudioEnvironment(const CallCaptureOptions& options);
 
