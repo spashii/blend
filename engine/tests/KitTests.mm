@@ -46,6 +46,20 @@ void Sleep(int ms)
     std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 }
 
+// Polls until `done` is true or `seconds` have passed, so a slow machine waits longer
+// instead of failing a check that only needed more time.
+bool WaitUntil(std::function<bool()> done, double seconds = 5)
+{
+    const auto until = std::chrono::steady_clock::now() + std::chrono::duration<double>(seconds);
+    while (!done()) {
+        if (std::chrono::steady_clock::now() > until) {
+            return false;
+        }
+        Sleep(5);
+    }
+    return true;
+}
+
 // Runs `body` and gives up on it after `seconds`: a deadlock is a failure, not a hung test.
 void WithinTime(const char* what, double seconds, std::function<void()> body)
 {
@@ -808,13 +822,15 @@ void RecoveryTests()
         Stream stream;
         auto capture = MakeCapture(world, stream);
         Check(capture->Start() == CallStart::Started, "the capture starts");
-        Sleep(300);
+        WaitUntil([&] { return world.pushedFrames > 48000 * 0.3; });
         // The tap goes away and cannot come back for a while: the audio service restarted.
         world.tapBlocked = true;
         world.Trigger(SystemChange::ServiceRestarted);
-        Sleep(500);
+        WaitUntil([&] { return stream.EventIndex("callTapLost") >= 0; });
+        Sleep(300);
         world.tapBlocked = false;
-        Sleep(600);
+        WaitUntil([&] { return stream.EventIndex("callTapRestored") >= 0; });
+        Sleep(300);
         capture->Stop();
         const int lost = stream.EventIndex("callTapLost");
         const int restored = stream.EventIndex("callTapRestored");
@@ -940,10 +956,10 @@ void RecoveryTests()
         world.callTone = false;
         auto capture = MakeCapture(world, stream);
         capture->Start();
-        Sleep(600);
+        WaitUntil([&] { return stream.EventIndex("callSilent") >= 0; });
         Check(stream.EventIndex("callSilent") >= 0, "callSilent after zeros while the app plays");
         world.callTone = true;
-        Sleep(400);
+        WaitUntil([&] { return stream.EventIndex("callHeard") >= 0; });
         const int silent = stream.EventIndex("callSilent"), heard = stream.EventIndex("callHeard");
         Check(heard > silent, "callHeard follows the first sound", heard);
         capture->Stop();
@@ -982,7 +998,8 @@ void RecoveryTests()
         Sleep(200);
         world.SetMic("mic-b");
         world.Trigger(SystemChange::Devices);
-        Sleep(500);
+        WaitUntil([&] { return world.starts >= 2; });
+        Sleep(100);
         {
             std::lock_guard lock(world.mutex);
             Check(world.startedMics.size() == 2 && world.startedMics.back() == "mic-b",
@@ -993,12 +1010,13 @@ void RecoveryTests()
         world.micBroken = true;
         world.SetMic("");
         world.Trigger(SystemChange::Devices);
-        Sleep(700);
+        WaitUntil([&] { return stream.EventIndex("microphoneLost") >= 0; });
         Check(stream.EventIndex("microphoneLost") >= 0, "a missing microphone becomes a notice");
         world.micBroken = false;
         world.SetMic("mic-c");
         world.Trigger(SystemChange::Devices);
-        Sleep(500);
+        WaitUntil([&] { return world.backends == 1; });
+        Sleep(300);
         capture->Stop();
         Check(world.backends == 0, "the capture ends only when stopped");
         Check(stream.Contiguous(), "frames stay continuous across microphone changes");
