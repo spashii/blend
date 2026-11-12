@@ -2,7 +2,8 @@
 # Builds the release disk image: tools/release.sh [--publish]
 #
 # Output: build/release/Blend-VERSION.dmg with Blend.app, which carries the driver, and
-# Blend.dmg, a byte-identical copy that is uploaded beside it.
+# Blend.dmg, a byte-identical copy that is uploaded beside it, and BlendKitCore-VERSION.xcframework.zip,
+# the engine as a binary Swift package target, with the root Package.swift that pins its checksum.
 # --publish then uploads it as GitHub release vVERSION and pushes the update feed and the
 # Homebrew cask that point at it; it needs a clean, pushed checkout and gh logged in.
 # With tools/release-identity.sh set up, it signs with that Developer ID, then notarizes and
@@ -69,6 +70,36 @@ cmake -S . -B $cmakeDir -G Ninja -DCMAKE_BUILD_TYPE=Release -DBLEND_BUILD_SPIKES
   -DBLEND_KEYCHAIN="$keychain" >/dev/null
 cmake --build $cmakeDir
 ctest --test-dir $cmakeDir --output-on-failure
+
+# BlendKit is resolved from the repository root by tag, so Package.swift has to name this
+# version's zip and checksum in the commit the tag points at. The zip is not signed: it is a
+# static library that ends up inside the host app's own signature.
+cmake --build $cmakeDir --target BlendKitCoreZip
+kitZip=$out/BlendKitCore-$version.xcframework.zip
+cp -f $cmakeDir/kit/${kitZip:t} $kitZip
+kitChecksum=$(<$cmakeDir/kit/${kitZip:t}.checksum)
+cat >$root/Package.swift <<EOF
+// swift-tools-version: 6.0
+import PackageDescription
+
+// Written by tools/release.sh for $version; kit/Package.swift is the development copy.
+// BlendKitCore has no product of its own: SwiftPM would write a libBlendKitCore.a over the
+// XCFramework's, so it reaches a host through BlendKit.
+let package = Package(
+    name: "BlendKit",
+    platforms: [.macOS(.v15)],
+    products: [
+        .library(name: "BlendKit", targets: ["BlendKit"]),
+    ],
+    targets: [
+        .binaryTarget(
+            name: "BlendKitCore",
+            url: "https://github.com/spashii/blend/releases/download/v$version/${kitZip:t}",
+            checksum: "$kitChecksum"),
+        .target(name: "BlendKit", dependencies: ["BlendKitCore"], path: "kit/Sources/BlendKit"),
+    ]
+)
+EOF
 
 (cd app && xcodegen generate --quiet)
 xcodebuild test -project app/Blend.xcodeproj -scheme BlendTests \
@@ -148,8 +179,12 @@ if $publish; then
     print -u2 "Not published: a release needs the Developer ID, notarization and the update key."
     exit 1
   }
-  # The image goes up before the feed that offers it.
-  gh release create v$version $dmg $out/Blend.dmg $dmg.sha256 --target $(git rev-parse HEAD) \
+  # The tag has to contain the Package.swift written above, so it is committed and pushed
+  # first and the release is made at that commit. The images go up before the feed that
+  # offers them.
+  git commit -q -m "build(kit): pin BlendKitCore $version" Package.swift
+  git push -q
+  gh release create v$version $dmg $out/Blend.dmg $dmg.sha256 $kitZip --target $(git rev-parse HEAD) \
     --title "Blend Mic $version" --generate-notes
   git commit -q -m "Blend $version" site/appcast.xml Casks/blend.rb
   git push -q

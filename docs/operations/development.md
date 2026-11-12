@@ -59,7 +59,7 @@ The other folders in `spikes/` hold the measurement scripts behind [the measurem
 tools/release.sh
 ```
 
-It builds a Release configuration, runs the tests, and writes `build/release/Blend-VERSION.dmg` and `build/release/Blend.dmg`, a byte-identical copy that gives every release the same download link, `https://github.com/spashii/blend/releases/latest/download/Blend.dmg`. Without a Developer ID the image is signed ad hoc, and people opening it need to approve it in System Settings once.
+It builds a Release configuration, runs the tests, and writes `build/release/Blend-VERSION.dmg` and `build/release/Blend.dmg`, a byte-identical copy that gives every release the same download link, `https://github.com/spashii/blend/releases/latest/download/Blend.dmg`. It also zips the engine as `BlendKitCore-VERSION.xcframework.zip`, the asset other repositories resolve BlendKit from, and writes the repository's root `Package.swift` with that version's URL and checksum. Without a Developer ID the image is signed ad hoc, and people opening it need to approve it in System Settings once.
 
 To sign and notarize, set up a Developer ID once per Mac:
 
@@ -80,6 +80,6 @@ With the key in place, a notarized build also adds the release to the update fee
 tools/release.sh --publish
 ```
 
-It builds and notarizes, uploads both images and the checksum as GitHub release `vVERSION`, then commits and pushes the feed and the cask, in that order so no copy of Blend is offered an update that isn't there yet. It needs `gh` logged in. Over SSH, `gh` can't read the Mac's keychain: build there, copy `Blend-VERSION.dmg`, `Blend.dmg` and `Blend-VERSION.dmg.sha256` to a machine where `gh` is logged in, run `gh release create vVERSION --target <full commit SHA>` with all three (a short SHA is rejected), check the release exists, and only then commit and push the updated `site/appcast.xml` and `Casks/blend.rb`.
+It builds and notarizes, commits and pushes the new `Package.swift` so the tag contains it, uploads both images, the checksum and the BlendKit zip as GitHub release `vVERSION`, then commits and pushes the feed and the cask, in that order so no copy of Blend is offered an update that isn't there yet. It needs `gh` logged in. Over SSH, `gh` can't read the Mac's keychain: build there, copy `Blend-VERSION.dmg`, `Blend.dmg`, `Blend-VERSION.dmg.sha256` and `BlendKitCore-VERSION.xcframework.zip` to a machine where `gh` is logged in, commit and push `Package.swift`, run `gh release create vVERSION --target <full commit SHA>` with all four (a short SHA is rejected), check the release exists, and only then commit and push the updated `site/appcast.xml` and `Casks/blend.rb`.
 
 The website is `site/`, published to GitHub Pages by `.github/workflows/pages.yml` when it changes on main.

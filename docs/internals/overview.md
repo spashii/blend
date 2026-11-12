@@ -41,6 +41,16 @@ app audio (process tap) ──┘
 - Voice isolation is Apple's AUSoundIsolation audio unit, run after echo cancellation, with the standard or the High Quality Voice model. It starts off because it adds delay and harms speech when other voices are as loud as the speaker.
 - Both run on the microphone's capture thread in 10 ms blocks. If a stage fails (a sample rate AEC3 refuses, say), it is skipped and the microphone goes on unprocessed rather than silent.
 
+## BlendKit
+
+BlendKit is the engine's capture code as a library, so another app can record an online call without Blend's driver. Blend Mic and Dictate depend on the same code, and it ships with Blend's releases.
+
+- **Capture and mixing are separate.** The engine mixes: sources write into rings that the driver's bus clock reads. BlendKit only captures. `BKCallCapture` ([`engine/include/BlendKit.h`](../../engine/include/BlendKit.h)) opens the microphone and a tap of the call app's processes in one private aggregate device, so both arrive in the same IO cycle on one clock. It converts them to a fixed output rate and delivers 2-channel frames, Me and Call, on an ordinary queue. The host's callback never runs on an audio thread. Echo cancellation uses the call as its far end and cleans the microphone only.
+- **Two APIs over one library.** The C interface (`BKCallCapture`, `BKProbes`, `BKVersion`) is the source of truth. The `BlendKit` Swift package ([`kit/Sources/BlendKit`](../../kit/Sources/BlendKit)) wraps it as `CallCapture`, `LevelProbes` and `AudioApps`. `BlendEngine.h`, the mixing interface, is in the same archive and unchanged.
+- **Packaging.** CMake merges the engine and WebRTC into one static `libBlendKitCore.a`, wrapped as `BlendKitCore.xcframework`. Static, so it sits inside the host's own binary and signature. `kit/Package.swift` is the development package, which points at the local XCFramework. The `Package.swift` at the repository root is what other repositories resolve: it points the same targets at the XCFramework zip on the GitHub release, and `tools/release.sh` rewrites it with the zip's checksum. It is only valid at release tags and at the commit that pins the latest release. BlendKitCore has no product of its own, because SwiftPM would write a library over the XCFramework's; hosts reach it through `BlendKit`.
+- **Versioning.** The version is Blend's `VERSION`, and the tag is `vX.Y.Z`. A change to the C interface or the Swift API needs a minor release. `BlendKit.version` reports the version the archive was built from.
+- **How Dictate pins it.** Dictate depends on `https://github.com/spashii/blend` with `exact:` the release version. Its Xcode project and `Package.resolved` are generated, and a range could resolve differently when it releases. Raising the pin is a Dictate commit that follows a Blend release. Dictate's third-party notices list `BlendKit.thirdPartyComponents`, and a Dictate test fails when one is missing.
+
 ## Telling copies of an app apart
 
 One app is many processes. Browsers play sound from a helper process, and WebKit from its GPU process. A process is attributed to the app copy that owns it by walking up its parent processes, then by asking macOS which process is responsible for it.
