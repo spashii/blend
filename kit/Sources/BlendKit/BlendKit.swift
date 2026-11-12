@@ -22,6 +22,20 @@ public enum BlendKit {
             url: "https://gitlab.freedesktop.org/pulseaudio/webrtc-audio-processing"),
         ThirdPartyComponent(
             name: "Abseil", license: "Apache-2.0", url: "https://github.com/abseil/abseil-cpp"),
+        ThirdPartyComponent(
+            name: "pffft", license: "FFTPACK license (BSD-style)",
+            url: "https://bitbucket.org/jpommier/pffft"),
+        ThirdPartyComponent(
+            name: "RNNoise", license: "BSD-3-Clause", url: "https://gitlab.xiph.org/xiph/rnnoise"),
+        ThirdPartyComponent(
+            name: "Ooura FFT", license: "Ooura's permissive license",
+            url: "http://www.kurims.kyoto-u.ac.jp/~ooura/fft.html"),
+        ThirdPartyComponent(
+            name: "FFT by Mark Olesen", license: "Olesen's permissive license",
+            url: "https://gitlab.freedesktop.org/pulseaudio/webrtc-audio-processing"),
+        ThirdPartyComponent(
+            name: "spl_sqrt_floor", license: "Public domain, by Wilco Dijkstra",
+            url: "https://gitlab.freedesktop.org/pulseaudio/webrtc-audio-processing"),
     ]
 }
 
