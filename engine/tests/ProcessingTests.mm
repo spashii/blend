@@ -8,6 +8,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <random>
 #include <vector>
 
@@ -26,12 +27,19 @@ void Check(bool ok, const char* what, double value)
 struct Output
 {
     std::vector<float> samples;
+    std::vector<float> farEnd;
+    bool sawNullFarEnd = false;
 };
 
-void Collect(void* context, const float* mono, uint32_t frames)
+void Collect(void* context, const float* mono, const float* farEnd, uint32_t frames)
 {
     auto out = static_cast<Output*>(context);
     out->samples.insert(out->samples.end(), mono, mono + frames);
+    if (farEnd) {
+        out->farEnd.insert(out->farEnd.end(), farEnd, farEnd + frames);
+    } else {
+        out->sawNullFarEnd = true;
+    }
 }
 
 // Energy over the last `seconds` of a signal, in dB.
@@ -66,6 +74,73 @@ std::vector<float> Run(bool echoCancel, blend::MicProcessor::Isolation isolation
     }
     std::printf("     %s\n", processor->Describe().c_str());
     return out.samples;
+}
+
+bool SameBytes(const std::vector<float>& a, const std::vector<float>& b)
+{
+    return a.size() == b.size() && std::memcmp(a.data(), b.data(), a.size() * sizeof(float)) == 0;
+}
+
+// The far end handed to the sink is the reference as it went in: left and right averaged,
+// untouched by echo cancellation, which rewrites its input. Distinct channels show the
+// average and not a pass of one side.
+void FarEndTests(const std::vector<float>& mic, const std::vector<float>& reference)
+{
+    std::vector<float> left(reference.size()), right(reference.size());
+    std::vector<float> stereo(reference.size() * 2), expected;
+    for (size_t i = 0; i < reference.size(); i++) {
+        left[i] = reference[i];
+        right[i] = 0.25f * reference[i] + 0.01f;
+        stereo[i * 2] = left[i];
+        stereo[i * 2 + 1] = right[i];
+    }
+    const size_t usable = mic.size() / kChunk * kChunk;
+    const size_t blocks = usable / 480;
+    for (size_t i = 0; i < blocks * 480; i++) {
+        expected.push_back(0.5f * (left[i] + right[i]));
+    }
+    for (bool echoCancel : {true, false}) {
+        Output out;
+        auto processor = blend::MicProcessor::Create(kRate, echoCancel,
+            blend::MicProcessor::Isolation::Off, Collect, &out, true);
+        if (!processor) {
+            std::printf("FAIL processor did not start\n");
+            failures++;
+            continue;
+        }
+        for (size_t at = 0; at + kChunk <= mic.size(); at += kChunk) {
+            processor->Process(&mic[at], 1, &stereo[at * 2], 2, &stereo[at * 2 + 1], 2, kChunk);
+        }
+        Check(SameBytes(out.farEnd, expected),
+            echoCancel ? "the far end reaches the sink bit-exact with echo cancellation on"
+                       : "the far end reaches the sink bit-exact with both stages off",
+            0);
+        Check(!out.sawNullFarEnd, "blocks with a reference carry a far end", 0);
+    }
+}
+
+// Pass-through: both stages off, the microphone comes out unchanged in 10 ms blocks.
+void PassThroughTests(const std::vector<float>& mic)
+{
+    Output out;
+    Check(!blend::MicProcessor::Create(kRate, false, blend::MicProcessor::Isolation::Off,
+              Collect, &out),
+        "without pass-through, no stages means no processor", 0);
+    auto processor = blend::MicProcessor::Create(kRate, false,
+        blend::MicProcessor::Isolation::Off, Collect, &out, true);
+    if (!processor) {
+        std::printf("FAIL pass-through processor did not start\n");
+        failures++;
+        return;
+    }
+    Check(processor->BlockFrames() == 480, "pass-through keeps 10 ms blocks", processor->BlockFrames());
+    for (size_t at = 0; at + kChunk <= mic.size(); at += kChunk) {
+        processor->Process(&mic[at], 1, nullptr, 1, nullptr, 1, kChunk);
+    }
+    std::vector<float> expected(mic.begin(), mic.begin() + out.samples.size());
+    Check(!out.samples.empty() && SameBytes(out.samples, expected),
+        "pass-through leaves the microphone bit-exact", 0);
+    Check(out.farEnd.empty() && out.sawNullFarEnd, "without a reference the far end is null", 0);
 }
 
 } // namespace
@@ -139,6 +214,9 @@ int main()
         const double removed = TailDb(hiss, 3) - TailDb(isolated, 3);
         Check(removed >= 10, "voice isolation removes at least 10 dB of noise", removed);
     }
+
+    FarEndTests(speechEcho, speech);
+    PassThroughTests(voice);
 
     // Only physical inputs key ducking. The built-in microphone is one; a device that does
     // not exist, as BlackHole does not on a Mac without it, is not.

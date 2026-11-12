@@ -42,6 +42,7 @@ add_library(BlendEngine STATIC
   src/BlendEngine.mm
   src/Config.cpp
   src/Engine.mm
+  src/MicCapture.mm
   src/MicProcessor.mm
   src/ProcessTap.mm
   src/Sources.mm)

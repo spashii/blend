@@ -3,15 +3,8 @@
 #include "HAL.hpp"
 #include "Routing.hpp"
 
-#import <AppKit/AppKit.h>
-#import <CoreAudio/AudioHardwareTapping.h>
-#import <CoreAudio/CATapDescription.h>
-
-
 #include <algorithm>
 #include <cmath>
-
-#include <unistd.h>
 
 namespace blend {
 
@@ -124,9 +117,9 @@ void Source::Produce(const AudioBufferList* input)
 DeviceSource::DeviceSource(std::string key, std::string uid, bool echoCancel,
     MicProcessor::Isolation isolation, Retire retire)
     : Source(std::move(key), std::move(retire))
-    , uid_(std::move(uid))
-    , echoCancel_(echoCancel)
-    , isolation_(isolation)
+    , mic_(MicCapture::Options{std::move(uid),
+          echoCancel ? MicCapture::Reference::EverythingButSelf : MicCapture::Reference::None,
+          echoCancel, isolation, false})
 {
 }
 
@@ -135,141 +128,39 @@ DeviceSource::~DeviceSource()
     Stop();
 }
 
-OSStatus DeviceSource::IOProc(AudioObjectID, const AudioTimeStamp*, const AudioBufferList* input,
-    const AudioTimeStamp*, AudioBufferList*, const AudioTimeStamp*, void* context)
-{
-    auto self = static_cast<DeviceSource*>(context);
-    if (!self->processor_) {
-        self->Produce(input);
-        return noErr;
-    }
-    if (!input || input->mNumberBuffers == 0) {
-        return noErr;
-    }
-    // The microphone's channels come first, then the tap's two, in subdevice order.
-    const routing::Microphone route = routing::Mic(input, self->micChannels_,
-        self->aggregate_ != kAudioObjectUnknown);
-    if (!route.mic) {
-        return noErr;
-    }
-    self->processor_->Process(route.mic.data, route.mic.stride, route.left.data,
-        route.left.stride, route.right.data, route.right.stride, routing::Frames(input));
-    return noErr;
-}
-
-void DeviceSource::Emit(void* context, const float* mono, uint32_t frames)
+void DeviceSource::Sink::Block(const float* me, const float*, uint32_t frames)
 {
     AudioBufferList list;
     list.mNumberBuffers = 1;
     list.mBuffers[0].mNumberChannels = 1;
     list.mBuffers[0].mDataByteSize = frames * sizeof(float);
-    list.mBuffers[0].mData = const_cast<float*>(mono);
-    static_cast<DeviceSource*>(context)->Produce(&list);
-}
-
-// Everything the Mac plays except Blend itself: Blend's own output carries the mixes,
-// which contain this microphone, and cancelling them would cancel the voice.
-bool DeviceSource::AddReference()
-{
-    AudioObjectID blend = kAudioObjectUnknown;
-    pid_t pid = getpid();
-    auto address = hal::Address(kAudioHardwarePropertyTranslatePIDToProcessObject);
-    UInt32 size = sizeof(blend);
-    AudioObjectGetPropertyData(kAudioObjectSystemObject, &address, sizeof(pid), &pid, &size, &blend);
-    NSArray* exclude = blend != kAudioObjectUnknown ? @[ @(blend) ] : @[];
-    CATapDescription* description =
-        [[CATapDescription alloc] initStereoGlobalTapButExcludeProcesses:exclude];
-    description.name = @"Blend: echo reference";
-    description.privateTap = YES;
-    description.muteBehavior = CATapUnmuted;
-    if (AudioHardwareCreateProcessTap(description, &tap_) != noErr) {
-        tap_ = kAudioObjectUnknown;
-        return false;
-    }
-    NSString* micUID = @(uid_.c_str());
-    NSString* tapUID = @(hal::GetString(tap_, kAudioTapPropertyUID).c_str());
-    NSDictionary* aggregate = @{
-        @kAudioAggregateDeviceNameKey : description.name,
-        @kAudioAggregateDeviceUIDKey : [NSUUID UUID].UUIDString,
-        @kAudioAggregateDeviceMainSubDeviceKey : micUID,
-        @kAudioAggregateDeviceIsPrivateKey : @YES,
-        @kAudioAggregateDeviceIsStackedKey : @NO,
-        @kAudioAggregateDeviceTapAutoStartKey : @NO,
-        @kAudioAggregateDeviceSubDeviceListKey : @[ @{@kAudioSubDeviceUIDKey : micUID} ],
-        @kAudioAggregateDeviceTapListKey :
-            @[ @{@kAudioSubTapUIDKey : tapUID, @kAudioSubTapDriftCompensationKey : @YES} ],
-    };
-    if (AudioHardwareCreateAggregateDevice((__bridge CFDictionaryRef)aggregate, &aggregate_) !=
-        noErr) {
-        aggregate_ = kAudioObjectUnknown;
-        AudioHardwareDestroyProcessTap(tap_);
-        tap_ = kAudioObjectUnknown;
-        return false;
-    }
-    ioDevice_ = aggregate_;
-    return true;
+    list.mBuffers[0].mData = const_cast<float*>(me);
+    owner_.Produce(&list);
 }
 
 bool DeviceSource::Start(double busRate, uint32_t busFrames)
 {
-    if (proc_) {
+    if (mic_.Running()) {
         return true;
     }
-    device_ = hal::DeviceForUID(uid_);
-    micChannels_ = device_ == kAudioObjectUnknown
-        ? 0 : hal::ChannelCount(device_, kAudioObjectPropertyScopeInput);
-    if (micChannels_ == 0) {
-        return false;
-    }
-    rate_ = hal::NominalRate(device_);
-    ioDevice_ = device_;
-    // Without the reference, echo cancellation is skipped and isolation still runs.
-    const bool reference = echoCancel_ && AddReference();
-    processor_ = MicProcessor::Create(hal::NominalRate(ioDevice_), reference, isolation_, Emit,
-        this);
-    // The buffer size is left alone: on a physical device it applies to every app. A
-    // processed microphone delivers in 10 ms blocks, which the ring has to absorb.
-    uint32_t frames = std::min<uint32_t>(hal::BufferFrames(ioDevice_), 4096);
-    if (processor_) {
-        frames += processor_->BlockFrames();
-    }
-    Publish(hal::NominalRate(ioDevice_), busRate, frames, busFrames);
-    if (AudioDeviceCreateIOProcID(ioDevice_, IOProc, this, &proc_) != noErr ||
-        AudioDeviceStart(ioDevice_, proc_) != noErr) {
-        Stop();
-        return false;
-    }
-    return true;
+    busRate_ = busRate;
+    busFrames_ = busFrames;
+    return mic_.Start(sink_);
 }
 
 bool DeviceSource::NeedsRestart() const
 {
-    return proc_ && (hal::DeviceForUID(uid_) != device_ || hal::NominalRate(device_) != rate_);
+    return mic_.NeedsRestart();
 }
 
 void DeviceSource::Stop()
 {
-    if (proc_) {
-        AudioDeviceStop(ioDevice_, proc_);
-        AudioDeviceDestroyIOProcID(ioDevice_, proc_);
-        proc_ = nullptr;
-    }
-    Unpublish();
-    if (aggregate_ != kAudioObjectUnknown) {
-        AudioHardwareDestroyAggregateDevice(aggregate_);
-        aggregate_ = kAudioObjectUnknown;
-    }
-    if (tap_ != kAudioObjectUnknown) {
-        AudioHardwareDestroyProcessTap(tap_);
-        tap_ = kAudioObjectUnknown;
-    }
-    processor_.reset();
-    ioDevice_ = kAudioObjectUnknown;
+    mic_.Stop();
 }
 
 std::string DeviceSource::Detail() const
 {
-    return processor_ ? processor_->Describe() : std::string();
+    return mic_.Describe();
 }
 
 // AppSource

@@ -45,15 +45,16 @@ MicProcessor::MicProcessor(double rate, Sink sink, void* context)
     , context_(context)
     , mic_(block_, 0.0f)
     , reference_(block_, 0.0f)
+    , farEnd_(block_, 0.0f)
     , cleaned_(block_, 0.0f)
     , isolated_(block_, 0.0f)
 {
 }
 
 std::unique_ptr<MicProcessor> MicProcessor::Create(double rate, bool echoCancel,
-    Isolation isolation, Sink sink, void* context)
+    Isolation isolation, Sink sink, void* context, bool passThrough)
 {
-    if (rate < 8000 || (!echoCancel && isolation == Isolation::Off)) {
+    if (rate < 8000 || (!echoCancel && isolation == Isolation::Off && !passThrough)) {
         return nullptr;
     }
     std::unique_ptr<MicProcessor> processor(new MicProcessor(rate, sink, context));
@@ -71,7 +72,7 @@ std::unique_ptr<MicProcessor> MicProcessor::Create(double rate, bool echoCancel,
     if (isolation != Isolation::Off && !processor->StartIsolation(isolation)) {
         os_log_error(Log(), "voice isolation could not start at %.0f Hz", rate);
     }
-    if (!processor->apm_ && !processor->isolation_) {
+    if (!processor->apm_ && !processor->isolation_ && !passThrough) {
         return nullptr;
     }
     return processor;
@@ -145,6 +146,7 @@ void MicProcessor::Process(const float* mic, uint32_t micStride, const float* re
 {
     for (uint32_t i = 0; i < frames; i++) {
         mic_[filled_] = mic[size_t(i) * micStride];
+        hasReference_ |= refLeft != nullptr;
         reference_[filled_] = refLeft ? 0.5f * (refLeft[size_t(i) * refLeftStride] +
                                                    refRight[size_t(i) * refRightStride])
                                       : 0.0f;
@@ -158,6 +160,8 @@ void MicProcessor::Process(const float* mic, uint32_t micStride, const float* re
 void MicProcessor::ProcessBlock()
 {
     const float* block = mic_.data();
+    // ProcessReverseStream rewrites the reference in place, so the far end is copied first.
+    std::memcpy(farEnd_.data(), reference_.data(), block_ * sizeof(float));
     if (apm_ && !apmFailed_.load(std::memory_order_relaxed)) {
         float* reference = reference_.data();
         float* mic = mic_.data();
@@ -195,7 +199,8 @@ void MicProcessor::ProcessBlock()
         isolationTime_ += block_;
         isolationInput_ = nullptr;
     }
-    sink_(context_, block, block_);
+    sink_(context_, block, hasReference_ ? farEnd_.data() : nullptr, block_);
+    hasReference_ = false;
 }
 
 OSStatus MicProcessor::FeedIsolation(void* context, AudioUnitRenderActionFlags*,

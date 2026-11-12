@@ -177,25 +177,37 @@ void ProduceTests()
     }
 }
 
-// A microphone source as DeviceSource::Start sets it up after the aggregate exists, minus
-// the device calls. Its processor writes its mono output into the ring.
+// Collects what a MicCapture delivers in blocks.
+class CollectSink : public blend::FrameSink
+{
+public:
+    void Block(const float* me, const float*, uint32_t frames) override
+    {
+        mono.insert(mono.end(), me, me + frames);
+    }
+    std::vector<float> mono;
+};
+
+// A microphone capture as MicCapture::Start sets it up after the aggregate exists, minus
+// the device calls.
 struct MicRig
 {
     MicRig(uint32_t micChannels, bool reference)
-        : source("mic", "no-such-device", true, blend::MicProcessor::Isolation::Off,
-              [](std::function<void()> free) { free(); })
+        : capture(blend::MicCapture::Options{"no-such-device",
+              blend::MicCapture::Reference::EverythingButSelf, true,
+              blend::MicProcessor::Isolation::Off, false})
     {
-        source.micChannels_ = micChannels;
+        capture.sink_ = &sink;
+        capture.micChannels_ = micChannels;
         // Any non-zero id marks the reference as present; nothing here calls the HAL with it.
-        source.aggregate_ = reference ? 1 : kAudioObjectUnknown;
-        source.processor_ = blend::MicProcessor::Create(kRate, true,
-            blend::MicProcessor::Isolation::Off, blend::DeviceSource::Emit, &source);
-        source.Publish(kRate, kRate, 512, 512);
+        capture.aggregate_ = reference ? 1 : kAudioObjectUnknown;
+        capture.processor_ = blend::MicProcessor::Create(kRate, true,
+            blend::MicProcessor::Isolation::Off, blend::MicCapture::Emit, &capture);
     }
     ~MicRig()
     {
-        source.aggregate_ = kAudioObjectUnknown;
-        source.Stop();
+        capture.aggregate_ = kAudioObjectUnknown;
+        capture.Stop();
     }
 
     // Calls the IO proc with `channels` laid out as `layout`, one chunk at a time, and
@@ -204,7 +216,6 @@ struct MicRig
         const std::function<float(uint32_t channel, size_t frame)>& signal, size_t frames)
     {
         constexpr uint32_t chunk = 512;
-        std::vector<float> out;
         for (size_t at = 0; at + chunk <= frames; at += chunk) {
             Buffers input(layout, chunk);
             uint32_t channel = 0;
@@ -215,16 +226,13 @@ struct MicRig
                     }
                 }
             }
-            blend::DeviceSource::IOProc(0, nullptr, input.list, nullptr, nullptr, nullptr, &source);
-            auto stereo = Drain(source);
-            for (size_t i = 0; i < stereo.size(); i += 2) {
-                out.push_back(stereo[i]);
-            }
+            blend::MicCapture::IOProc(0, nullptr, input.list, nullptr, nullptr, nullptr, &capture);
         }
-        return out;
+        return sink.mono;
     }
 
-    blend::DeviceSource source;
+    CollectSink sink;
+    blend::MicCapture capture;
 };
 
 double TailDb(const std::vector<float>& x, double seconds)

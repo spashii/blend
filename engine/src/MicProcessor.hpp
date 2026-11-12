@@ -7,7 +7,8 @@
 // microphone, so both arrive in the same IO cycle, already aligned to within a few
 // milliseconds. Isolation is Apple's AUSoundIsolation. Both run on 10 ms blocks: the
 // processor gathers whatever the device delivers into blocks and passes each finished
-// block to its sink.
+// block to its sink, together with the far end it was cancelled against, so a host can
+// use the two as one sample-aligned pair.
 
 #include <AudioToolbox/AudioToolbox.h>
 
@@ -32,13 +33,17 @@ public:
     // "off", "standard" or "high", as the app stores it.
     static Isolation ParseIsolation(const std::string& value);
 
-    // Receives each processed block, mono, on the capture thread.
-    using Sink = void (*)(void* context, const float* mono, uint32_t frames);
+    // Receives each processed block, mono, on the capture thread, with the far end for the
+    // same instants: the reference exactly as it went into echo cancellation (the left and
+    // right channels averaged). `farEnd` is null when the blocks had no reference.
+    using Sink = void (*)(void* context, const float* me, const float* farEnd, uint32_t frames);
 
     // Control thread. Returns null when neither stage could be set up, and the caller
-    // then captures the microphone unprocessed.
+    // then captures the microphone unprocessed. With `passThrough`, a processor with both
+    // stages off is still returned: it only gathers 10 ms blocks, for a caller that wants
+    // the far end beside the microphone.
     static std::unique_ptr<MicProcessor> Create(double rate, bool echoCancel, Isolation isolation,
-        Sink sink, void* context);
+        Sink sink, void* context, bool passThrough = false);
     ~MicProcessor();
 
     MicProcessor(const MicProcessor&) = delete;
@@ -76,9 +81,11 @@ private:
     // Capture thread only.
     std::vector<float> mic_;
     std::vector<float> reference_;
+    std::vector<float> farEnd_;
     std::vector<float> cleaned_;
     std::vector<float> isolated_;
     uint32_t filled_ = 0;
+    bool hasReference_ = false;
     Float64 isolationTime_ = 0;
     const float* isolationInput_ = nullptr;
 

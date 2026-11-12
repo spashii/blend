@@ -5,6 +5,7 @@
 // SourceReader that brings it onto the bus clock.
 
 #include "FrameRing.hpp"
+#include "MicCapture.hpp"
 #include "MicProcessor.hpp"
 #include "ProcessTap.hpp"
 #include "SourceReader.hpp"
@@ -83,7 +84,7 @@ private:
     std::atomic<float> producedPeak_{0};
 };
 
-// An input device, optionally with echo cancellation and voice isolation (MicProcessor).
+// An input device, optionally with echo cancellation and voice isolation (MicCapture).
 // With echo cancellation it records the device and a tap of everything the Mac plays
 // through one private aggregate device, so the echo reference arrives with the microphone.
 class DeviceSource : public Source
@@ -99,23 +100,28 @@ public:
     std::string Detail() const override;
 
 private:
-    static OSStatus IOProc(AudioObjectID, const AudioTimeStamp*, const AudioBufferList* input,
-        const AudioTimeStamp*, AudioBufferList*, const AudioTimeStamp*, void* context);
-    static void Emit(void* context, const float* mono, uint32_t frames);
-    bool AddReference();
+    // Queues the microphone in this source's ring: its own buffers when unprocessed,
+    // else the processed mono. The far end is not mixed.
+    class Sink : public FrameSink
+    {
+    public:
+        explicit Sink(DeviceSource& owner) : owner_(owner) {}
+        void Prepare(double rate, uint32_t bufferFrames) override
+        {
+            owner_.Publish(rate, owner_.busRate_, bufferFrames, owner_.busFrames_);
+        }
+        void Stopped() override { owner_.Unpublish(); }
+        void Raw(const AudioBufferList* input) override { owner_.Produce(input); }
+        void Block(const float* me, const float*, uint32_t frames) override;
 
-    const std::string uid_;
-    const bool echoCancel_;
-    const MicProcessor::Isolation isolation_;
-    AudioObjectID device_ = kAudioObjectUnknown;
-    // The device itself, or the aggregate that adds the echo reference to it.
-    AudioObjectID ioDevice_ = kAudioObjectUnknown;
-    AudioObjectID tap_ = kAudioObjectUnknown;
-    AudioObjectID aggregate_ = kAudioObjectUnknown;
-    UInt32 micChannels_ = 0;
-    AudioDeviceIOProcID proc_ = nullptr;
-    double rate_ = 0;
-    std::unique_ptr<MicProcessor> processor_;
+    private:
+        DeviceSource& owner_;
+    };
+
+    double busRate_ = 0;
+    uint32_t busFrames_ = 0;
+    Sink sink_{*this};
+    MicCapture mic_;
 };
 
 // Captures every audio process an app owns (see ProcessTap.hpp), following processes that
