@@ -1,9 +1,9 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta name="google-site-verification" content="yIswHnPtZ-nIXyURs0nLVeaXR0_zyeNWoyeVSVrAD-U">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="google-site-verification" content="yIswHnPtZ-nIXyURs0nLVeaXR0_zyeNWoyeVSVrAD-U">
 <title>Blend Mic: a free virtual microphone for Mac</title>
 <meta name="description" content="Blend Mic is a free, open source virtual microphone for Mac. Mix your voice with a call or any app's sound, so Handy, OpenSuperWhisper or any dictation app transcribes both sides, even with headphones on.">
 <link rel="canonical" href="https://spashii.github.io/blend/">
@@ -16,6 +16,10 @@
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Blend Mic: a free virtual microphone for Mac">
+<meta name="twitter:description" content="Mix your voice with a call or any app's sound, so a local dictation app transcribes both sides, even with headphones on. Free and open source.">
+<meta name="twitter:image" content="https://spashii.github.io/blend/og.png">
+<meta property="og:image:alt" content="Blend Mic: a free virtual microphone for Mac">
 <meta name="theme-color" content="#f7f7f8" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#111113" media="(prefers-color-scheme: dark)">
 <script type="application/ld+json">
@@ -27,7 +31,7 @@
   "description": "A free, open source virtual microphone for Mac that mixes your voice with a call or any app's sound, so a local dictation app can transcribe both sides, even with headphones on.",
   "applicationCategory": "MultimediaApplication",
   "operatingSystem": "macOS 15 or later, Apple silicon",
-  "softwareVersion": "0.8.0",
+  "softwareVersion": "0.9.0",
   "license": "https://opensource.org/licenses/MIT",
   "url": "https://spashii.github.io/blend/",
   "downloadUrl": "https://github.com/spashii/blend/releases/latest/download/Blend.dmg",
@@ -40,7 +44,7 @@
   },
   "author": {
    "@type": "Person",
-   "name": "Sameer",
+   "name": "spashii",
    "url": "https://github.com/spashii"
   }
  },
@@ -61,7 +65,7 @@
     "name": "Is Blend Mic free?",
     "acceptedAnswer": {
      "@type": "Answer",
-     "text": "Yes. It is free and open source under the MIT license, with no accounts."
+     "text": "Yes. It is free and open source under the MIT license."
     }
    },
    {
@@ -77,7 +81,7 @@
     "name": "Can't macOS make a virtual mic on its own?",
     "acceptedAnswer": {
      "@type": "Answer",
-     "text": "No. Audio MIDI Setup can make an aggregate device, but it puts devices side by side instead of mixing them, so a call app hears only the first channels, usually just your mic. It can't capture one app's sound either. For that you need a driver like BlackHole plus a Multi-Output Device, which takes everything your Mac plays, with no volume per app, and a call would hear itself. Blend Mic mixes your sources into one mic, with a slider for each."
+     "text": "No. Audio MIDI Setup can make an aggregate device, but it puts devices side by side instead of mixing them, so a call app hears only the first channels, usually just your mic. It can't capture one app's sound either. For that you need a driver like BlackHole plus a Multi-Output Device, which takes everything your Mac plays, with no volume per app, and a call would hear itself."
     }
    },
    {
@@ -109,7 +113,7 @@
     "name": "What does Blend Mic need?",
     "acceptedAnswer": {
      "@type": "Answer",
-     "text": "A Mac with Apple silicon and macOS 15 or later."
+     "text": "A Mac with Apple silicon and macOS 15 or later. It has been tested on macOS 26 only."
     }
    }
   ]
@@ -120,14 +124,14 @@
 <style>
   :root {
     --bg: #f7f7f8; --card: #fff; --fg: #0b0b0c; --muted: #6b6b73; --line: #e8e8ea;
-    --accent: #3074fe; --green: #34c759; --glass: rgba(255,255,255,.62); --frame: #e9e9ed;
+    --accent: #1f5fe0; --button: #2563eb; --green: #34c759; --glass: rgba(255,255,255,.62); --frame: #e9e9ed;
     --ring: 0 2px 6px rgba(0,0,0,.06), 0 0 0 1px rgba(0,0,0,.05);
     --ring-lg: 0 30px 60px -28px rgba(16,24,40,.3), 0 0 0 1px rgba(0,0,0,.05);
     --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #111113; --card: #1c1c1f; --fg: #f2f2f4; --muted: #9a9aa3; --line: #2c2c31;
+      --accent: #7aa8ff; --bg: #111113; --card: #1c1c1f; --fg: #f2f2f4; --muted: #9a9aa3; --line: #2c2c31;
       --glass: rgba(28,28,31,.6); --frame: #1f1f23;
       --ring: 0 2px 6px rgba(0,0,0,.3), 0 0 0 1px rgba(255,255,255,.07);
       --ring-lg: 0 30px 60px -28px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.08);
@@ -142,6 +146,7 @@
   h2 { font-size: 28px; line-height: 1.2; letter-spacing: -.02em; font-weight: 600; }
   h3 { font-size: 17px; line-height: 1.4; letter-spacing: -.01em; font-weight: 600; }
   a { color: inherit; text-decoration: none; }
+  a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
   a:hover { text-decoration: underline; }
   p a { color: var(--accent); }
   .muted { color: var(--muted); }
@@ -159,13 +164,16 @@
 
   .button { display: inline-block; padding: 12px 20px; border-radius: 12px; }
   .button:hover { text-decoration: none; }
-  .button.primary { background: linear-gradient(#3f80ff, #2867f2); color: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.25); }
+  .button.primary { background: var(--button); color: #fff; }
   .button.outline { box-shadow: inset 0 0 0 1.5px var(--line); }
   .button.outline:hover { box-shadow: inset 0 0 0 1.5px var(--muted); }
   .button.small { padding: 6px 14px; border-radius: 10px; }
 
   .hero { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; padding-top: 136px; }
   .lede { margin-top: 24px; max-width: 36ch; }
+  .dictate { display: flex; align-items: center; gap: 16px; margin-top: 24px; flex-wrap: wrap; }
+  .dictate p { flex: 1 1 240px; max-width: 340px; font-size: 15px; line-height: 1.4; }
+  .dictate .button { flex: 0 0 auto; }
   .actions { display: flex; gap: 16px; margin-top: 32px; flex-wrap: wrap; }
   .meta { margin-top: 16px; }
 
@@ -218,16 +226,11 @@
   .switch.on::after { left: 18px; }
   .menu { align-self: stretch; border-radius: 10px; background: var(--card); box-shadow: var(--ring); padding: 4px; }
   .menu div { padding: 3px 10px; border-radius: 6px; white-space: nowrap; }
-  .menu .picked { background: var(--accent); color: #fff; }
+  .menu .picked { background: var(--button); color: #fff; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .chip { padding: 4px 12px; border-radius: 999px; background: var(--card); box-shadow: var(--ring); white-space: nowrap; }
   .chip.out { color: var(--muted); text-decoration: line-through; box-shadow: inset 0 0 0 1px var(--line); background: none; }
 
-  .work { display: grid; gap: 16px; margin-top: 24px; max-width: 640px; }
-  .work .point { display: flex; gap: 16px; align-items: flex-start; }
-  .work img { flex: 0 0 auto; border-radius: 12px; }
-  .work .point:hover { text-decoration: none; box-shadow: inset 0 0 0 1.5px var(--muted); }
-  .work .point:hover h3 { text-decoration: underline; }
 
   .faq { max-width: 640px; }
   .faq-list { margin-top: 24px; border-top: 1px solid var(--line); }
@@ -244,13 +247,23 @@
   .cmd pre { margin: 0; padding: 14px 88px 14px 16px; overflow-x: auto; font: 15px/1.6 ui-monospace, "SF Mono", Menlo, monospace; color: var(--fg); }
   .copy { position: absolute; top: 8px; right: 8px; padding: 4px 12px; border: 0; border-radius: 8px; font: inherit; color: var(--fg); background: var(--frame); cursor: pointer; }
   .copy:hover { box-shadow: inset 0 0 0 1px var(--muted); }
-  footer.site { max-width: 960px; margin: 0 auto; border-top: 1px solid var(--line); padding: 32px 24px; color: var(--muted); }
+  footer.site { max-width: 960px; margin: 0 auto; border-top: 1px solid var(--line); padding: 32px 24px 48px; color: var(--muted); }
+  footer.site .work { display: grid; gap: 16px; margin: 24px 0 32px; max-width: 640px; }
+  footer.site .work .point { display: flex; gap: 16px; align-items: flex-start; color: var(--fg); }
+  footer.site .work h3 { color: var(--fg); }
+  footer.site .work img { flex: 0 0 auto; border-radius: 12px; }
+  footer.site .work .point:hover { text-decoration: none; box-shadow: inset 0 0 0 1.5px var(--muted); }
+  footer.site .work .point:hover h3 { text-decoration: underline; }
   footer.site a { color: var(--fg); }
+  footer.site h2 { color: var(--fg); }
 
   @media (max-width: 780px) {
     :root { --section: 72px; }
     .hero { grid-template-columns: 1fr; gap: 48px; padding-top: 104px; }
     h1 { font-size: 42px; }
+    .hero .actions { gap: 8px; }
+    .hero .actions .button { padding: 12px 13px; }
+    .dictate { margin-top: 16px; }
     h2 { font-size: 24px; }
     .shots, .points { grid-template-columns: 1fr; }
     .transcript { margin-left: 16px; }
@@ -275,6 +288,10 @@
       <div class="actions">
         <a class="button primary" href="https://github.com/spashii/blend/releases/latest/download/Blend.dmg">Download for Mac</a>
         <a class="button outline" href="https://github.com/spashii/blend/releases">GitHub releases</a>
+      </div>
+      <div class="dictate">
+        <p class="muted">Looking for dictation, or a way to transcribe your calls with Blend Mic? Try Dictate.</p>
+        <a class="button outline" href="https://spashii.github.io/dictate/?utm_source=blend&amp;utm_medium=website&amp;utm_campaign=hero">Get Dictate</a>
       </div>
       <p class="meta muted">Free and open source (MIT) · Apple silicon, macOS 15 or later</p>
     </div>
@@ -304,13 +321,13 @@
       <figcaption>Split mode: you on the left, the call on the right.</figcaption>
     </figure>
     <figure>
-      <div class="frame"><picture><source srcset="screens/05-check-dark.png" media="(prefers-color-scheme: dark)"><img src="screens/05-check-light.png" alt="The menu bar panel checking the Calls mix by recording five seconds to play back" loading="lazy"></picture></div>
-      <figcaption>Check a mix: it plays five seconds back to you.</figcaption>
+      <div class="frame"><picture><source srcset="screens/05-check-dark.png" media="(prefers-color-scheme: dark)"><img src="screens/05-check-light.png" alt="The menu bar panel: a mix called Calls with a slider and meter for the microphone and Music, and its Check button" loading="lazy"></picture></div>
+      <figcaption>Check a mix from the menu bar to hear what it sounds like.</figcaption>
     </figure>
   </section>
 
   <section class="why">
-    <p>I wanted my own transcription app to hear my online calls with my headphones on. BlackHole needed a lot of setup before anything worked, and Loopback costs $99, so I made one that sits in the menu bar. It takes an app's sound without rerouting it, so you keep hearing it, and it leaves the call out of system audio, so the call never hears itself.</p>
+    <p>I wanted my own transcription app to hear my online calls with my headphones on. BlackHole needed a lot of setup before anything worked, and Loopback costs $99, so I made one that sits in the menu bar. It takes an app's sound without rerouting it, so you keep hearing it.</p>
   </section>
 
   <section class="points">
@@ -347,22 +364,6 @@
     </div>
   </section>
 
-  <section class="recommend">
-    <h2>My other work</h2>
-    <div class="work">
-      <a class="point" href="https://dembrane.com">
-        <img src="icons/dembrane.png" alt="" width="52" height="52">
-        <div><h3>dembrane</h3>
-        <p>Makes sense of big, messy conversations, so everyone can shape what happens next.</p></div>
-      </a>
-      <a class="point" href="https://spashii.github.io/dictate/">
-        <img src="icons/voice.svg" alt="" width="52" height="52">
-        <div><h3>Voice (beta)</h3>
-        <p>The local dictation app I recommend with Blend Mic. In split mode it transcribes you and the call separately. Tell the other side you're recording.</p></div>
-      </a>
-    </div>
-  </section>
-
   <section class="faq">
     <h2>Questions</h2>
     <div class="faq-list">
@@ -372,7 +373,7 @@
       </details>
       <details>
         <summary><h3>Is Blend Mic free?</h3></summary>
-        <p>Yes. It is free and open source under the MIT license, with no accounts.</p>
+        <p>Yes. It is free and open source under the MIT license.</p>
       </details>
       <details>
         <summary><h3>How is Blend Mic different from BlackHole or Loopback?</h3></summary>
@@ -380,7 +381,7 @@
       </details>
       <details>
         <summary><h3>Can't macOS make a virtual mic on its own?</h3></summary>
-        <p>No. Audio MIDI Setup can make an aggregate device, but it puts devices side by side instead of mixing them, so a call app hears only the first channels, usually just your mic. It can't capture one app's sound either. For that you need a driver like BlackHole plus a Multi-Output Device, which takes everything your Mac plays, with no volume per app, and a call would hear itself. Blend Mic mixes your sources into one mic, with a slider for each.</p>
+        <p>No. Audio MIDI Setup can make an aggregate device, but it puts devices side by side instead of mixing them, so a call app hears only the first channels, usually just your mic. It can't capture one app's sound either. For that you need a driver like BlackHole plus a Multi-Output Device, which takes everything your Mac plays, with no volume per app, and a call would hear itself.</p>
       </details>
       <details>
         <summary><h3>Which apps can use a Blend Mic mix?</h3></summary>
@@ -396,13 +397,13 @@
       </details>
       <details>
         <summary><h3>What does Blend Mic need?</h3></summary>
-        <p>A Mac with Apple silicon and macOS 15 or later.</p>
+        <p>A Mac with Apple silicon and macOS 15 or later. It has been tested on macOS 26 only.</p>
       </details>
     </div>
   </section>
 
   <section class="bottom">
-    <p>Your audio never leaves your Mac, and there are no accounts. Blend Mic checks for updates once a day, and the update server counts those checks by app, version and country and never stores your IP address. This page counts visits with Cloudflare Web Analytics, which sets no cookies and doesn't track you across sites.</p>
+    <p>Your audio never leaves your Mac, and there are no accounts. Blend Mic checks for updates once a day, and the update server counts those checks by app, version and country and never stores your IP address. This page counts visits with Cloudflare Web Analytics, without cookies.</p>
     <div class="actions">
       <a class="button primary" href="https://github.com/spashii/blend/releases/latest/download/Blend.dmg">Download for Mac</a>
       <a class="button outline" href="https://github.com/spashii/blend/releases">GitHub releases</a>
@@ -411,11 +412,26 @@
       <p>Or with Homebrew:</p>
       <div class="cmd"><pre id="brew">brew tap spashii/blend https://github.com/spashii/blend
 brew trust spashii/blend
-brew install --cask blend</pre><button type="button" class="copy" data-copy="brew">Copy</button></div>
+brew install --cask blend</pre><button type="button" class="copy" data-copy="brew" aria-label="Copy the Homebrew commands">Copy</button></div>
     </div>
   </section>
 </main>
-<footer class="site">Made by <a href="https://github.com/spashii">Sameer</a>. MIT licensed. <a href="https://github.com/spashii/blend">Source on GitHub</a></footer>
+<footer class="site">
+  <h2>My other work</h2>
+  <div class="work">
+    <a class="point" href="https://dembrane.com">
+      <img src="icons/dembrane.png" alt="" width="52" height="52">
+      <div><h3>dembrane</h3>
+      <p>Makes sense of big, messy conversations, so everyone can shape what happens next.</p></div>
+    </a>
+    <a class="point" href="https://spashii.github.io/dictate/?utm_source=blend&amp;utm_medium=website&amp;utm_campaign=other-work">
+      <img src="icons/dictate.svg" alt="" width="52" height="52">
+      <div><h3>Dictate</h3>
+      <p>Live transcripts of your online calls, made on your Mac. It records calls on its own.</p></div>
+    </a>
+  </div>
+  <p>Made by <a href="https://github.com/spashii">spashii</a>. <a href="https://github.com/spashii/blend">Source on GitHub</a></p>
+</footer>
 
 <script>
 document.querySelectorAll(".copy").forEach(button => button.addEventListener("click", async () => {
@@ -430,7 +446,7 @@ document.querySelectorAll(".copy").forEach(button => button.addEventListener("cl
   const script = [
     ["Call", "Can you send the deck before Friday?"],
     ["You", "Yes, tonight. I'll add the pricing page."],
-    ["Call", "Perfect. Loop in Maya too."],
+    ["Call", "Perfect. Loop in the team too."],
     ["You", "Will do."],
   ];
   const lines = document.getElementById("lines");
