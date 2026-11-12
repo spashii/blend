@@ -56,27 +56,28 @@ OSStatus ProcessTap::IOProc(AudioObjectID, const AudioTimeStamp*, const AudioBuf
 // Every audio process whose owning app copy is this tap's app, and, with an instance, the
 // copy launched with that identity. For system audio: this process, whose output carries
 // the mixes, and every process of the excluded app copies.
-std::vector<AudioObjectID> ProcessTap::MatchingProcesses() const
+std::vector<AudioObjectID> ProcessTap::Matching(const TapTarget& target,
+    const std::vector<int>& excludedOwners)
 {
     std::vector<AudioObjectID> matches;
     for (AudioObjectID object : hal::GetArray<AudioObjectID>(kAudioObjectSystemObject,
              kAudioHardwarePropertyProcessObjectList)) {
         pid_t pid = -1;
         hal::Get(object, kAudioProcessPropertyPID, pid);
-        if (target_.system) {
+        if (target.system) {
             const int owner = pid > 0 ? OwnerPID(pid) : 0;
             if (pid == getpid() ||
-                (owner && std::find(excludedOwners_.begin(), excludedOwners_.end(), owner) !=
-                        excludedOwners_.end())) {
+                (owner && std::find(excludedOwners.begin(), excludedOwners.end(), owner) !=
+                        excludedOwners.end())) {
                 matches.push_back(object);
             }
             continue;
         }
         const int owner = pid > 0 ? OwnerPID(pid) : 0;
-        if (!owner || AppBundleID(owner) != target_.bundleID) {
+        if (!owner || AppBundleID(owner) != target.bundleID) {
             continue;
         }
-        if (target_.instance && CopyIdentity(owner) != *target_.instance) {
+        if (target.instance && CopyIdentity(owner) != *target.instance) {
             continue;
         }
         matches.push_back(object);

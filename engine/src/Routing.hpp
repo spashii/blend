@@ -108,6 +108,9 @@ struct Microphone
     Channel mic;
     Channel left;
     Channel right;
+    // The buffers held a different number of channels than the microphone's and the tap's
+    // add up to.
+    bool mismatch = false;
 };
 
 // An echo-cancelled microphone's aggregate: the microphone's `micChannels` channels come
@@ -122,6 +125,25 @@ inline Microphone Mic(const AudioBufferList* input, uint32_t micChannels, bool r
     }
     route.left = ChannelAt(input, micChannels);
     route.right = ChannelAt(input, micChannels + 1);
+    if (!route.right) {
+        route.right = route.left;
+    }
+    return route;
+}
+
+// The same aggregate when the tap's channel count is known: it sits after the microphone's
+// channels, or after the buffers' first channels when their total is not what the two add
+// up to, as for any tap (see Tap). The microphone is still the first channel.
+inline Microphone MicTap(const AudioBufferList* input, uint32_t micChannels, uint32_t tapChannels)
+{
+    Microphone route{ChannelAt(input, 0), {}, {}};
+    if (!route.mic) {
+        return route;
+    }
+    const TapSpan tap = Tap(TotalChannels(input), micChannels, tapChannels);
+    route.mismatch = tap.mismatch;
+    route.left = ChannelAt(input, tap.span.first);
+    route.right = tap.span.count == 1 ? route.left : ChannelAt(input, tap.span.first + 1);
     if (!route.right) {
         route.right = route.left;
     }

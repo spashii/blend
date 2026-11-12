@@ -6,15 +6,19 @@
 // With a reference, the device and a tap of everything the Mac plays (this process left
 // out, since its output carries the mixes, which contain this microphone) run in one
 // private aggregate device, so the reference arrives in the microphone's IO cycle already
-// aligned to it.
+// aligned to it. A call app's processes can be the reference instead, for a host that
+// records both sides of a call: the far end then comes out beside the microphone.
 
 #include "Capture.hpp"
 #include "MicProcessor.hpp"
+#include "ProcessTap.hpp"
 
 #include <CoreAudio/CoreAudio.h>
 
+#include <atomic>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace blend {
 
@@ -25,6 +29,9 @@ public:
     {
         None,
         EverythingButSelf,
+        // The processes of Options::target. Start fails when the tap cannot be built,
+        // since a host asking for this has no use for the microphone alone.
+        Processes,
     };
 
     struct Options
@@ -37,6 +44,9 @@ public:
         // Gather 10 ms blocks even with every stage off. Implied once a reference is
         // running, because the far end only travels in blocks.
         bool passThrough = false;
+        // Reference::Processes only. The tap is named "<tapPrefix>: <bundle id>".
+        TapTarget target;
+        std::string tapPrefix;
     };
 
     explicit MicCapture(Options options);
@@ -55,6 +65,16 @@ public:
 
     // True when the capture must be rebuilt: its device was replaced or changed rate.
     bool NeedsRestart() const;
+    // Control queue, Reference::Processes only: points the tap at the target's processes as
+    // they are now.
+    void RefreshProcesses();
+    // Any thread. True when echo cancellation was asked for, ran, and then failed.
+    bool EchoCancelFailed() const;
+    // Any thread: buffers whose channel count was not the microphone's plus the tap's.
+    uint64_t ChannelMismatches() const { return mismatches_.load(std::memory_order_relaxed); }
+    uint32_t MicChannels() const { return micChannels_; }
+    // The rate the IO device ran at when this capture started.
+    double Rate() const { return ioRate_; }
     // What the processing stages are doing, starting with a space, or empty.
     std::string Describe() const;
 
@@ -72,8 +92,14 @@ private:
     AudioObjectID tap_ = kAudioObjectUnknown;
     AudioObjectID aggregate_ = kAudioObjectUnknown;
     UInt32 micChannels_ = 0;
+    // Zero when unknown, which routes the way Blend's own echo reference always has.
+    UInt32 tapChannels_ = 0;
+    std::atomic<uint64_t> mismatches_{0};
+    std::vector<AudioObjectID> processes_;
+    void* description_ = nullptr; // CATapDescription, retained
     AudioDeviceIOProcID proc_ = nullptr;
     double rate_ = 0;
+    double ioRate_ = 0;
     std::unique_ptr<MicProcessor> processor_;
 };
 

@@ -40,13 +40,20 @@ add_dependencies(webrtc_apm webrtc_ext)
 add_library(BlendEngine STATIC
   src/Apps.mm
   src/BlendEngine.mm
+  src/BlendKit.mm
+  src/CallCapture.mm
+  src/CallPipeline.cpp
   src/Config.cpp
   src/Engine.mm
   src/MicCapture.mm
   src/MicProcessor.mm
   src/ProcessTap.mm
+  src/Probes.mm
   src/Sources.mm)
 target_include_directories(BlendEngine PUBLIC include PRIVATE src)
+# BKVersion reports the Blend release the library was built from.
+set_source_files_properties(src/BlendKit.mm PROPERTIES
+  COMPILE_DEFINITIONS "BLEND_KIT_VERSION=\"${BLEND_VERSION}\"")
 target_compile_options(BlendEngine PRIVATE
   $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>
   -Wall -Wextra -Wno-unused-parameter)
@@ -85,3 +92,8 @@ add_executable(BlendTimerTests tests/TimerTests.mm)
 target_link_libraries(BlendTimerTests PRIVATE BlendEngine)
 target_compile_options(BlendTimerTests PRIVATE -fobjc-arc)
 add_test(NAME timer COMMAND BlendTimerTests)
+
+add_executable(BlendKitTests tests/KitTests.mm)
+target_link_libraries(BlendKitTests PRIVATE BlendEngine)
+target_compile_options(BlendKitTests PRIVATE -fobjc-arc)
+add_test(NAME kit COMMAND BlendKitTests)

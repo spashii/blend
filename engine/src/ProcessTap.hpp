@@ -62,11 +62,15 @@ public:
     // effect at the next Start or RefreshProcesses.
     void SetExcludedOwners(std::vector<int> owners) { excludedOwners_ = std::move(owners); }
 
+    // The audio processes a target covers now, sorted; for system audio, the ones to leave
+    // out. Shared with the echo reference of a MicCapture that taps a call app.
+    static std::vector<AudioObjectID> Matching(const TapTarget& target,
+        const std::vector<int>& excludedOwners);
+
 private:
     static OSStatus IOProc(AudioObjectID, const AudioTimeStamp*, const AudioBufferList* input,
         const AudioTimeStamp*, AudioBufferList*, const AudioTimeStamp*, void* context);
-    // The processes to capture, or for system audio the ones to leave out.
-    std::vector<AudioObjectID> MatchingProcesses() const;
+    std::vector<AudioObjectID> MatchingProcesses() const { return Matching(target_, excludedOwners_); }
 
     const TapTarget target_;
     const std::string namePrefix_;

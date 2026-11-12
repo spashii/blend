@@ -13,6 +13,19 @@
 
 namespace blend {
 
+namespace {
+
+NSArray<NSNumber*>* Numbers(const std::vector<AudioObjectID>& objects)
+{
+    NSMutableArray* numbers = [NSMutableArray arrayWithCapacity:objects.size()];
+    for (AudioObjectID object : objects) {
+        [numbers addObject:@(object)];
+    }
+    return numbers;
+}
+
+} // namespace
+
 MicCapture::MicCapture(Options options)
     : options_(std::move(options))
 {
@@ -35,10 +48,15 @@ OSStatus MicCapture::IOProc(AudioObjectID, const AudioTimeStamp*, const AudioBuf
         return noErr;
     }
     // The microphone's channels come first, then the tap's two, in subdevice order.
-    const routing::Microphone route = routing::Mic(input, self->micChannels_,
-        self->aggregate_ != kAudioObjectUnknown);
+    const bool reference = self->aggregate_ != kAudioObjectUnknown;
+    const routing::Microphone route = reference && self->tapChannels_
+        ? routing::MicTap(input, self->micChannels_, self->tapChannels_)
+        : routing::Mic(input, self->micChannels_, reference);
     if (!route.mic) {
         return noErr;
+    }
+    if (route.mismatch) {
+        self->mismatches_.fetch_add(1, std::memory_order_relaxed);
     }
     self->processor_->Process(route.mic.data, route.mic.stride, route.left.data,
         route.left.stride, route.right.data, route.right.stride, routing::Frames(input));
@@ -54,15 +72,23 @@ void MicCapture::Emit(void* context, const float* me, const float* farEnd, uint3
 // contain this microphone, and cancelling them would cancel the voice.
 bool MicCapture::AddReference()
 {
-    AudioObjectID blend = kAudioObjectUnknown;
-    pid_t pid = getpid();
-    auto address = hal::Address(kAudioHardwarePropertyTranslatePIDToProcessObject);
-    UInt32 size = sizeof(blend);
-    AudioObjectGetPropertyData(kAudioObjectSystemObject, &address, sizeof(pid), &pid, &size, &blend);
-    NSArray* exclude = blend != kAudioObjectUnknown ? @[ @(blend) ] : @[];
-    CATapDescription* description =
-        [[CATapDescription alloc] initStereoGlobalTapButExcludeProcesses:exclude];
-    description.name = @"Blend: echo reference";
+    CATapDescription* description = nil;
+    if (options_.reference == Reference::Processes) {
+        processes_ = ProcessTap::Matching(options_.target, {});
+        description = [[CATapDescription alloc] initStereoMixdownOfProcesses:Numbers(processes_)];
+        description.name = [NSString
+            stringWithFormat:@"%s: %s", options_.tapPrefix.c_str(), options_.target.bundleID.c_str()];
+    } else {
+        AudioObjectID blend = kAudioObjectUnknown;
+        pid_t pid = getpid();
+        auto address = hal::Address(kAudioHardwarePropertyTranslatePIDToProcessObject);
+        UInt32 size = sizeof(blend);
+        AudioObjectGetPropertyData(kAudioObjectSystemObject, &address, sizeof(pid), &pid, &size,
+            &blend);
+        NSArray* exclude = blend != kAudioObjectUnknown ? @[ @(blend) ] : @[];
+        description = [[CATapDescription alloc] initStereoGlobalTapButExcludeProcesses:exclude];
+        description.name = @"Blend: echo reference";
+    }
     description.privateTap = YES;
     description.muteBehavior = CATapUnmuted;
     if (AudioHardwareCreateProcessTap(description, &tap_) != noErr) {
@@ -90,7 +116,27 @@ bool MicCapture::AddReference()
         return false;
     }
     ioDevice_ = aggregate_;
+    AudioStreamBasicDescription format = {};
+    tapChannels_ = hal::Get(tap_, kAudioTapPropertyFormat, format) ? format.mChannelsPerFrame : 0;
+    description_ = (__bridge_retained void*)description;
     return true;
+}
+
+void MicCapture::RefreshProcesses()
+{
+    if (!description_ || options_.reference != Reference::Processes) {
+        return;
+    }
+    auto now = ProcessTap::Matching(options_.target, {});
+    if (now == processes_) {
+        return;
+    }
+    processes_ = now;
+    CATapDescription* description = (__bridge CATapDescription*)description_;
+    description.processes = Numbers(processes_);
+    auto address = hal::Address(kAudioTapPropertyDescription);
+    CATapDescription* value = description;
+    AudioObjectSetPropertyData(tap_, &address, 0, nullptr, sizeof(value), &value);
 }
 
 bool MicCapture::Start(FrameSink& sink)
@@ -108,7 +154,13 @@ bool MicCapture::Start(FrameSink& sink)
     rate_ = hal::NominalRate(device_);
     ioDevice_ = device_;
     // Without the reference, echo cancellation is skipped and isolation still runs.
-    const bool reference = options_.reference == Reference::EverythingButSelf && AddReference();
+    const bool reference = options_.reference != Reference::None && AddReference();
+    if (options_.reference == Reference::Processes && !reference) {
+        Stop();
+        return false;
+    }
+    mismatches_.store(0, std::memory_order_relaxed);
+    ioRate_ = hal::NominalRate(ioDevice_);
     processor_ = MicProcessor::Create(hal::NominalRate(ioDevice_),
         reference && options_.echoCancel, options_.isolation, Emit, this,
         options_.passThrough || reference);
@@ -129,8 +181,21 @@ bool MicCapture::Start(FrameSink& sink)
 
 bool MicCapture::NeedsRestart() const
 {
-    return proc_ &&
-           (hal::DeviceForUID(options_.uid) != device_ || hal::NominalRate(device_) != rate_);
+    if (!proc_) {
+        return false;
+    }
+    if (hal::DeviceForUID(options_.uid) != device_ || hal::NominalRate(device_) != rate_) {
+        return true;
+    }
+    // The aggregate labels what the host receives, so its own rate has to hold still.
+    return options_.reference == Reference::Processes &&
+           hal::NominalRate(ioDevice_) != ioRate_;
+}
+
+bool MicCapture::EchoCancelFailed() const
+{
+    return processor_ && options_.echoCancel && aggregate_ != kAudioObjectUnknown &&
+           !processor_->EchoCancelling();
 }
 
 void MicCapture::Stop()
@@ -152,6 +217,12 @@ void MicCapture::Stop()
         AudioHardwareDestroyProcessTap(tap_);
         tap_ = kAudioObjectUnknown;
     }
+    if (description_) {
+        CFBridgingRelease(description_);
+        description_ = nullptr;
+    }
+    processes_.clear();
+    tapChannels_ = 0;
     processor_.reset();
     ioDevice_ = kAudioObjectUnknown;
 }
