@@ -1,7 +1,7 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
-// Written by tools/release.sh for 0.8.0; kit/Package.swift is the development copy.
+// Written by tools/release.sh for v0.9.0; kit/Package.swift is the development copy.
 // BlendKitCore has no product of its own: SwiftPM would write a libBlendKitCore.a over the
 // XCFramework's, so it reaches a host through BlendKit.
 let package = Package(
@@ -13,8 +13,8 @@ let package = Package(
     targets: [
         .binaryTarget(
             name: "BlendKitCore",
-            url: "https://github.com/spashii/blend/releases/download/v0.8.0/BlendKitCore-0.8.0.xcframework.zip",
-            checksum: "0000000000000000000000000000000000000000000000000000000000000000"),
+            url: "https://github.com/spashii/blend/releases/download/v0.9.0/BlendKitCore-0.9.0.xcframework.zip",
+            checksum: "ff6f85529b8506d895e09520dd6852a8a49cc57de7d744d19cdaa9c45994171d"),
         .target(name: "BlendKit", dependencies: ["BlendKitCore"], path: "kit/Sources/BlendKit"),
     ]
 )
