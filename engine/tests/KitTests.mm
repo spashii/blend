@@ -423,7 +423,13 @@ struct World
     std::atomic<int> backends{0};
     std::atomic<int> starts{0};
     std::atomic<bool> unpaced{false};
+    // Stop returns, then a cycle that was in flight keeps calling the sink, as a device can.
     std::atomic<bool> straggle{false};
+    // Backends started up to this many starts stop delivering after ten blocks but stay
+    // running, as a device that hangs does.
+    std::atomic<int> stallStarts{0};
+    std::atomic<uint64_t> pushedFrames{0};
+    std::vector<std::thread> stragglers;
     std::mutex mutex;
     std::string defaultMic = "mic-a";
     std::vector<std::string> startedMics;
@@ -449,6 +455,17 @@ struct World
         }
         if (call) {
             dispatch_async(q, ^{ call(change); });
+        }
+    }
+    void JoinStragglers()
+    {
+        std::vector<std::thread> threads;
+        {
+            std::lock_guard lock(mutex);
+            threads.swap(stragglers);
+        }
+        for (auto& thread : threads) {
+            thread.join();
         }
     }
     void TriggerRate()
@@ -490,6 +507,7 @@ public:
         rate_ = world_.rate;
         sink_ = &sink;
         deadTap_ = world_.starts < world_.deadTapStarts;
+        stalls_ = world_.starts < world_.stallStarts;
         sink.Prepare(rate_, 480);
         world_.backends++;
         world_.starts++;
@@ -512,6 +530,16 @@ public:
         }
         running_ = false;
         thread_.join();
+        if (world_.straggle) {
+            std::lock_guard lock(world_.mutex);
+            world_.stragglers.emplace_back([sink = sink_, tap = request_.callTap,
+                                               block = uint32_t(rate_ / 100)] {
+                std::vector<float> me(block, 0.1f), call(block, 0.1f);
+                for (int i = 0; i < 300; i++) {
+                    sink->Block(me.data(), tap ? call.data() : nullptr, block);
+                }
+            });
+        }
         world_.backends--;
     }
 
@@ -542,7 +570,12 @@ private:
                 call[i] = world_.callTone && !deadTap_ ? float(0.3 * std::sin(2 * M_PI * 1000 * t)) : 0.0f;
             }
             sample += block;
+            if (stalls_ && sample > 10 * block) {
+                std::this_thread::sleep_for(1ms);
+                continue;
+            }
             sink_->Block(me.data(), request_.callTap ? call.data() : nullptr, block);
+            world_.pushedFrames += block;
             next += 10ms;
             if (!world_.unpaced) {
                 std::this_thread::sleep_until(next);
@@ -575,6 +608,7 @@ private:
     FrameSink* sink_ = nullptr;
     double rate_ = 0;
     bool deadTap_ = false;
+    bool stalls_ = false;
     std::atomic<bool> running_{false};
     std::thread thread_;
 };
@@ -805,8 +839,72 @@ void RecoveryTests()
         Check(longest > 48000 * 0.2, "Me continues alone while the tap is lost", double(longest));
         Check(Rms(stream.call, stream.call.size() - 4800, 4800) > 0.1,
             "Call is back after the tap is restored", Rms(stream.call, stream.call.size() - 4800, 4800));
-        Check(stream.me.size() > 48000 * 1.2, "the stream kept pace with the clock",
-            double(stream.me.size()));
+        Check(stream.me.size() >= world.pushedFrames, "the stream kept pace with the clock",
+            double(stream.me.size()) - double(world.pushedFrames.load()));
+    });
+
+    WithinTime("a device that hangs is restarted", 20, [] {
+        World world;
+        Stream stream;
+        world.stallStarts = 1;
+        CallCaptureTiming timing = FastTiming();
+        timing.stallAfter = 0.3;
+        auto capture = MakeCapture(world, stream, timing);
+        capture->Start();
+        for (int i = 0; i < 300 && world.starts < 2; i++) {
+            Sleep(10);
+        }
+        Check(world.starts == 2, "no frames for stallAfter restarts the capture", world.starts);
+        Sleep(300);
+        capture->Stop();
+        Check(stream.Contiguous(), "frames are continuous across the stall restart");
+        std::lock_guard lock(stream.mutex);
+        Check(stream.me.size() > 48000 * 0.4 &&
+                  Rms(stream.me, stream.me.size() - 4800, 4800) > 0.1,
+            "Me delivers again after the restart", double(stream.me.size()));
+    });
+
+    WithinTime("a cycle still in flight after stop", 30, [] {
+        for (int round = 0; round < 10; round++) {
+            World world;
+            Stream stream;
+            world.straggle = true;
+            auto capture = MakeCapture(world, stream);
+            if (capture->Start() != CallStart::Started) {
+                Check(false, "the capture starts");
+                return;
+            }
+            Sleep(50);
+            capture->Stop();
+            world.JoinStragglers();
+            capture.reset();
+        }
+        Check(true, "a late cycle after Stop reaches a detached pipeline, not a freed one");
+    });
+
+    WithinTime("stop delivers the last frames", 20, [] {
+        World world;
+        Stream stream;
+        auto capture = MakeCapture(world, stream);
+        capture->Start();
+        Sleep(400);
+        capture->Stop();
+        // Everything the device pushed, to the last frame, in order and untouched.
+        const size_t pushed = size_t(world.pushedFrames.load());
+        std::lock_guard lock(stream.mutex);
+        std::vector<float> expected(pushed);
+        for (size_t i = 0; i < pushed; i++) {
+            expected[i] = float(0.2 * std::sin(2 * M_PI * 440 * double(i) / 48000));
+        }
+        Check(pushed > 48000 * 0.2 && stream.me.size() == pushed,
+            "every frame the device produced was delivered", double(stream.me.size()) - pushed);
+        // Rounding in the tone's own computation aside, every frame matches; a missing or
+        // shifted block differs by far more.
+        double worst = 0;
+        for (size_t i = 0; i < expected.size() && i < stream.me.size(); i++) {
+            worst = std::max(worst, std::fabs(double(stream.me[i]) - expected[i]));
+        }
+        Check(worst < 1e-5, "and Me is that signal from the first frame to the last", worst);
     });
 
     WithinTime("a tap that cannot join the microphone backs off", 20, [] {
@@ -1023,6 +1121,57 @@ void EchoTests()
     });
 }
 
+// Headphones: the call plays where the microphone cannot hear it. Echo cancellation must
+// leave the speaker alone, and the far end still arrives as Call.
+void HeadphoneTests()
+{
+    std::mt19937 random(11);
+    std::normal_distribution<float> noise(0, 1);
+    constexpr double kRate = 48000;
+    const size_t frames = size_t(10 * kRate);
+    std::vector<float> far(frames), voice(frames);
+    float low1 = 0, low2 = 0;
+    for (size_t i = 0; i < frames; i++) {
+        low1 = 0.7f * low1 + 0.3f * noise(random);
+        low2 = 0.7f * low2 + 0.3f * low1;
+        const double t = double(i) / kRate;
+        far[i] = std::fmod(t, 1.0) < 0.6 ? 0.125f * low2 : 0.0f;
+        voice[i] = float(0.1 * std::sin(2 * M_PI * 220 * t) *
+                         (0.6 + 0.4 * std::sin(2 * M_PI * 3 * t)));
+    }
+    WithinTime("far end active, none of it in the microphone", 120, [&] {
+        World world;
+        world.unpaced = true;
+        world.micSignal = &voice;
+        world.farSignal = &far;
+        world.echoCancel = true;
+        CallCaptureTiming timing = FastTiming();
+        timing.ringSeconds = 30;
+        Stream stream;
+        auto capture = MakeCapture(world, stream, timing, EchoMode::On);
+        capture->Start();
+        for (int i = 0; i < 2000 && !world.signalDone; i++) {
+            Sleep(5);
+        }
+        capture->Stop();
+        std::lock_guard lock(stream.mutex);
+        if (stream.me.size() < size_t(5 * kRate)) {
+            Check(false, "the headphone run delivered audio", double(stream.me.size()));
+            return;
+        }
+        const double change = TailDb(stream.me, 3, kRate) - TailDb(voice, 3, kRate);
+        Check(std::fabs(change) <= 3, "near-end speech keeps its level beside an active far end",
+            change);
+        const double tone = Db(Tone(stream.me, stream.me.size() - 48000, 24000, 220, kRate)) -
+                            Db(Tone(voice, stream.me.size() - 48000, 24000, 220, kRate));
+        Check(std::fabs(tone) <= 3, "and its tone is intact", tone);
+        const size_t blocks = stream.call.size() / 480 * 480;
+        Check(blocks > 0 &&
+                  std::equal(stream.call.begin(), stream.call.begin() + blocks, far.begin()),
+            "Call is the far end, untouched");
+    });
+}
+
 void ApiTests()
 {
     Check(BKVersion() && std::strlen(BKVersion()) > 0, "BKVersion names a release", 0);
@@ -1128,6 +1277,7 @@ int main()
     ThreadingTests();
     RecoveryTests();
     EchoTests();
+    HeadphoneTests();
     if (const char* live = std::getenv("BLENDKIT_LIVE"); live && std::strcmp(live, "1") == 0) {
         LiveTests();
     }
