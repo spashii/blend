@@ -2,6 +2,7 @@
 
 #include "Apps.hpp"
 #include "HAL.hpp"
+#include "Routing.hpp"
 
 #import <AppKit/AppKit.h>
 #import <CoreAudio/AudioHardwareTapping.h>
@@ -105,33 +106,14 @@ void Source::Produce(const AudioBufferList* input)
 
     // Left and right come from the first two channels found across all buffers; a mono
     // source is copied to both.
-    const float* left = nullptr;
-    const float* right = nullptr;
-    UInt32 leftStride = 1, rightStride = 1;
-    for (UInt32 b = 0; b < input->mNumberBuffers && !right; b++) {
-        const AudioBuffer& buffer = input->mBuffers[b];
-        auto data = static_cast<const float*>(buffer.mData);
-        for (UInt32 c = 0; c < buffer.mNumberChannels && !right; c++) {
-            if (!left) {
-                left = data + c;
-                leftStride = buffer.mNumberChannels;
-            } else {
-                right = data + c;
-                rightStride = buffer.mNumberChannels;
-            }
-        }
-    }
-    if (!left) {
+    const routing::Stereo pair = routing::FirstTwo(input);
+    if (!pair.left) {
         return;
-    }
-    if (!right) {
-        right = left;
-        rightStride = leftStride;
     }
     float peak = producedPeak_.load(std::memory_order_relaxed);
     for (UInt32 i = 0; i < frames; i++) {
-        stereo_[i * 2] = left[i * leftStride];
-        stereo_[i * 2 + 1] = right[i * rightStride];
+        stereo_[i * 2] = pair.left[i];
+        stereo_[i * 2 + 1] = pair.right[i];
         peak = std::max(peak, std::max(std::fabs(stereo_[i * 2]), std::fabs(stereo_[i * 2 + 1])));
     }
     producedPeak_.store(peak, std::memory_order_relaxed);
@@ -165,37 +147,14 @@ OSStatus DeviceSource::IOProc(AudioObjectID, const AudioTimeStamp*, const AudioB
     if (!input || input->mNumberBuffers == 0) {
         return noErr;
     }
-    // The microphone's channels come first, then the tap's two, in subdevice order. The
-    // first microphone channel is processed; a mono reference repeats its one channel.
-    const float* channels[3] = {nullptr, nullptr, nullptr};
-    UInt32 strides[3] = {1, 1, 1};
-    const UInt32 wanted[3] = {0, self->micChannels_, self->micChannels_ + 1};
-    UInt32 index = 0;
-    for (UInt32 b = 0; b < input->mNumberBuffers; b++) {
-        const AudioBuffer& buffer = input->mBuffers[b];
-        for (UInt32 c = 0; c < buffer.mNumberChannels; c++, index++) {
-            for (int k = 0; k < 3; k++) {
-                if (index == wanted[k]) {
-                    channels[k] = static_cast<const float*>(buffer.mData) + c;
-                    strides[k] = buffer.mNumberChannels;
-                }
-            }
-        }
-    }
-    if (!channels[0]) {
+    // The microphone's channels come first, then the tap's two, in subdevice order.
+    const routing::Microphone route = routing::Mic(input, self->micChannels_,
+        self->aggregate_ != kAudioObjectUnknown);
+    if (!route.mic) {
         return noErr;
     }
-    if (self->aggregate_ == kAudioObjectUnknown) {
-        channels[1] = channels[2] = nullptr;
-    } else if (!channels[2]) {
-        channels[2] = channels[1];
-        strides[2] = strides[1];
-    }
-    const AudioBuffer& first = input->mBuffers[0];
-    const UInt32 frames =
-        first.mDataByteSize / (sizeof(float) * std::max<UInt32>(1, first.mNumberChannels));
-    self->processor_->Process(channels[0], strides[0], channels[1], strides[1], channels[2],
-        strides[2], frames);
+    self->processor_->Process(route.mic.data, route.mic.stride, route.left.data,
+        route.left.stride, route.right.data, route.right.stride, routing::Frames(input));
     return noErr;
 }
 
