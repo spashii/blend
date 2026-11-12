@@ -6,6 +6,7 @@
 
 #include "FrameRing.hpp"
 #include "MicProcessor.hpp"
+#include "ProcessTap.hpp"
 #include "SourceReader.hpp"
 
 #include <CoreAudio/CoreAudio.h>
@@ -117,8 +118,8 @@ private:
     std::unique_ptr<MicProcessor> processor_;
 };
 
-// Captures every audio process an app owns (see Apps.hpp), following processes that start
-// after capture began. With an instance, only the copy launched with that identity.
+// Captures every audio process an app owns (see ProcessTap.hpp), following processes that
+// start after capture began. With an instance, only the copy launched with that identity.
 //
 // System() captures everything the Mac plays instead, except this process and the app
 // copies given to SetExcludedOwners: a mix's "System audio", which leaves out the apps
@@ -134,34 +135,39 @@ public:
     void Stop() override;
 
     // Control queue: re-reads the process list and updates the live tap if it changed.
-    void RefreshProcesses();
+    void RefreshProcesses() { tap_.RefreshProcesses(); }
 
     // Control queue: silences the app's own output while true, so a person can hear which
     // copy is which.
-    void SetMuted(bool muted);
+    void SetMuted(bool muted) { tap_.SetMuted(muted); }
 
     // Control queue, system audio only: the app copies, by owner pid, to leave out. Takes
     // effect at the next Start or RefreshProcesses.
-    void SetExcludedOwners(std::vector<int> owners) { excludedOwners_ = std::move(owners); }
+    void SetExcludedOwners(std::vector<int> owners) { tap_.SetExcludedOwners(std::move(owners)); }
 
 private:
-    static OSStatus IOProc(AudioObjectID, const AudioTimeStamp*, const AudioBufferList* input,
-        const AudioTimeStamp*, AudioBufferList*, const AudioTimeStamp*, void* context);
-    AppSource(std::string key, std::string bundleID, std::optional<std::string> instance,
-        bool system, Retire retire);
-    // The processes to capture, or for system audio the ones to leave out.
-    std::vector<AudioObjectID> MatchingProcesses() const;
+    // Queues the tap's frames in this source's ring.
+    class Sink : public FrameSink
+    {
+    public:
+        explicit Sink(AppSource& owner) : owner_(owner) {}
+        void Prepare(double rate, uint32_t bufferFrames) override
+        {
+            owner_.Publish(rate, owner_.busRate_, bufferFrames, owner_.busFrames_);
+        }
+        void Stopped() override { owner_.Unpublish(); }
+        void Raw(const AudioBufferList* input) override { owner_.Produce(input); }
 
-    const std::string bundleID_;
-    const std::optional<std::string> instance_;
-    const bool system_ = false;
-    std::vector<int> excludedOwners_;
-    bool muted_ = false;
-    void* description_ = nullptr; // CATapDescription, retained
-    AudioObjectID tap_ = kAudioObjectUnknown;
-    AudioObjectID aggregate_ = kAudioObjectUnknown;
-    AudioDeviceIOProcID proc_ = nullptr;
-    std::vector<AudioObjectID> processes_;
+    private:
+        AppSource& owner_;
+    };
+
+    AppSource(std::string key, TapTarget target, Retire retire);
+
+    double busRate_ = 0;
+    uint32_t busFrames_ = 0;
+    Sink sink_{*this};
+    ProcessTap tap_;
 };
 
 // Plays one mix to the default output in real time, for checking it on headphones. The

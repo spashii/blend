@@ -1,6 +1,5 @@
 #include "Sources.hpp"
 
-#include "Apps.hpp"
 #include "HAL.hpp"
 #include "Routing.hpp"
 
@@ -276,24 +275,21 @@ std::string DeviceSource::Detail() const
 // AppSource
 
 AppSource::AppSource(std::string bundleID, std::optional<std::string> instance, Retire retire)
-    : AppSource(instance ? "app:" + bundleID + "#" + *instance : "app:" + bundleID, bundleID,
-          instance, false, std::move(retire))
+    : AppSource(instance ? "app:" + bundleID + "#" + *instance : "app:" + bundleID,
+          TapTarget{bundleID, instance, false}, std::move(retire))
 {
 }
 
-AppSource::AppSource(std::string key, std::string bundleID, std::optional<std::string> instance,
-    bool system, Retire retire)
+AppSource::AppSource(std::string key, TapTarget target, Retire retire)
     : Source(std::move(key), std::move(retire))
-    , bundleID_(std::move(bundleID))
-    , instance_(std::move(instance))
-    , system_(system)
+    , tap_(std::move(target), "Blend")
 {
 }
 
 std::shared_ptr<AppSource> AppSource::System(std::string key, Retire retire)
 {
     return std::shared_ptr<AppSource>(
-        new AppSource(std::move(key), {}, std::nullopt, true, std::move(retire)));
+        new AppSource(std::move(key), TapTarget{{}, std::nullopt, true}, std::move(retire)));
 }
 
 AppSource::~AppSource()
@@ -301,156 +297,19 @@ AppSource::~AppSource()
     Stop();
 }
 
-OSStatus AppSource::IOProc(AudioObjectID, const AudioTimeStamp*, const AudioBufferList* input,
-    const AudioTimeStamp*, AudioBufferList*, const AudioTimeStamp*, void* context)
-{
-    static_cast<AppSource*>(context)->Produce(input);
-    return noErr;
-}
-
-// Every audio process whose owning app copy is this source's app, and, with an instance,
-// the copy launched with that identity. For system audio: this process, whose output
-// carries the mixes, and every process of the excluded app copies.
-std::vector<AudioObjectID> AppSource::MatchingProcesses() const
-{
-    std::vector<AudioObjectID> matches;
-    for (AudioObjectID object : hal::GetArray<AudioObjectID>(kAudioObjectSystemObject,
-             kAudioHardwarePropertyProcessObjectList)) {
-        pid_t pid = -1;
-        hal::Get(object, kAudioProcessPropertyPID, pid);
-        if (system_) {
-            const int owner = pid > 0 ? OwnerPID(pid) : 0;
-            if (pid == getpid() ||
-                (owner && std::find(excludedOwners_.begin(), excludedOwners_.end(), owner) !=
-                        excludedOwners_.end())) {
-                matches.push_back(object);
-            }
-            continue;
-        }
-        const int owner = pid > 0 ? OwnerPID(pid) : 0;
-        if (!owner || AppBundleID(owner) != bundleID_) {
-            continue;
-        }
-        if (instance_ && CopyIdentity(owner) != *instance_) {
-            continue;
-        }
-        matches.push_back(object);
-    }
-    std::sort(matches.begin(), matches.end());
-    return matches;
-}
-
-static NSArray<NSNumber*>* Numbers(const std::vector<AudioObjectID>& objects)
-{
-    NSMutableArray* numbers = [NSMutableArray arrayWithCapacity:objects.size()];
-    for (AudioObjectID object : objects) {
-        [numbers addObject:@(object)];
-    }
-    return numbers;
-}
-
 bool AppSource::Start(double busRate, uint32_t busFrames)
 {
-    if (proc_) {
+    if (tap_.Running()) {
         return true;
     }
-    processes_ = MatchingProcesses();
-    CATapDescription* description = system_
-        ? [[CATapDescription alloc] initStereoGlobalTapButExcludeProcesses:Numbers(processes_)]
-        : [[CATapDescription alloc] initStereoMixdownOfProcesses:Numbers(processes_)];
-    description.name = system_ ? @"Blend: system audio"
-                               : [NSString stringWithFormat:@"Blend: %s", bundleID_.c_str()];
-    description.privateTap = YES;
-    description.muteBehavior = muted_ ? CATapMuted : CATapUnmuted;
-    if (AudioHardwareCreateProcessTap(description, &tap_) != noErr) {
-        tap_ = kAudioObjectUnknown;
-        return false;
-    }
-    description_ = (__bridge_retained void*)description;
-
-    // The tap needs a clock; the default output device is where the app's audio goes.
-    AudioObjectID output = kAudioObjectUnknown;
-    hal::Get(kAudioObjectSystemObject, kAudioHardwarePropertyDefaultOutputDevice, output);
-    NSString* outputUID = @(hal::GetString(output, kAudioDevicePropertyDeviceUID).c_str());
-    NSString* tapUID = @(hal::GetString(tap_, kAudioTapPropertyUID).c_str());
-    NSDictionary* aggregate = @{
-        @kAudioAggregateDeviceNameKey : description.name,
-        @kAudioAggregateDeviceUIDKey : [NSUUID UUID].UUIDString,
-        @kAudioAggregateDeviceMainSubDeviceKey : outputUID,
-        @kAudioAggregateDeviceIsPrivateKey : @YES,
-        @kAudioAggregateDeviceIsStackedKey : @NO,
-        // Auto-start made other apps' mic starts hang in Chromium's testing.
-        @kAudioAggregateDeviceTapAutoStartKey : @NO,
-        @kAudioAggregateDeviceSubDeviceListKey : @[ @{@kAudioSubDeviceUIDKey : outputUID} ],
-        @kAudioAggregateDeviceTapListKey :
-            @[ @{@kAudioSubTapUIDKey : tapUID, @kAudioSubTapDriftCompensationKey : @YES} ],
-    };
-    if (AudioHardwareCreateAggregateDevice((__bridge CFDictionaryRef)aggregate, &aggregate_) !=
-        noErr) {
-        aggregate_ = kAudioObjectUnknown;
-        Stop();
-        return false;
-    }
-    Publish(hal::NominalRate(aggregate_), busRate, hal::BufferFrames(aggregate_), busFrames);
-    if (AudioDeviceCreateIOProcID(aggregate_, IOProc, this, &proc_) != noErr ||
-        AudioDeviceStart(aggregate_, proc_) != noErr) {
-        Stop();
-        return false;
-    }
-    return true;
-}
-
-void AppSource::RefreshProcesses()
-{
-    if (!description_) {
-        return;
-    }
-    auto now = MatchingProcesses();
-    if (now == processes_) {
-        return;
-    }
-    processes_ = now;
-    CATapDescription* description = (__bridge CATapDescription*)description_;
-    description.processes = Numbers(processes_);
-    auto address = hal::Address(kAudioTapPropertyDescription);
-    CATapDescription* value = description;
-    AudioObjectSetPropertyData(tap_, &address, 0, nullptr, sizeof(value), &value);
-}
-
-void AppSource::SetMuted(bool muted)
-{
-    muted_ = muted;
-    if (!description_) {
-        return;
-    }
-    CATapDescription* description = (__bridge CATapDescription*)description_;
-    description.muteBehavior = muted ? CATapMuted : CATapUnmuted;
-    auto address = hal::Address(kAudioTapPropertyDescription);
-    CATapDescription* value = description;
-    AudioObjectSetPropertyData(tap_, &address, 0, nullptr, sizeof(value), &value);
+    busRate_ = busRate;
+    busFrames_ = busFrames;
+    return tap_.Start(sink_);
 }
 
 void AppSource::Stop()
 {
-    if (proc_) {
-        AudioDeviceStop(aggregate_, proc_);
-        AudioDeviceDestroyIOProcID(aggregate_, proc_);
-        proc_ = nullptr;
-    }
-    Unpublish();
-    if (aggregate_ != kAudioObjectUnknown) {
-        AudioHardwareDestroyAggregateDevice(aggregate_);
-        aggregate_ = kAudioObjectUnknown;
-    }
-    if (tap_ != kAudioObjectUnknown) {
-        AudioHardwareDestroyProcessTap(tap_);
-        tap_ = kAudioObjectUnknown;
-    }
-    if (description_) {
-        CFBridgingRelease(description_);
-        description_ = nullptr;
-    }
-    processes_.clear();
+    tap_.Stop();
 }
 
 // MonitorOutput

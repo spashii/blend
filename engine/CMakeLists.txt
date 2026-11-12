@@ -43,6 +43,7 @@ add_library(BlendEngine STATIC
   src/Config.cpp
   src/Engine.mm
   src/MicProcessor.mm
+  src/ProcessTap.mm
   src/Sources.mm)
 target_include_directories(BlendEngine PUBLIC include PRIVATE src)
 target_compile_options(BlendEngine PRIVATE
