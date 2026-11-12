@@ -114,6 +114,8 @@ public:
         // The far end only travels in 10 ms blocks, and Me should keep one shape whether or
         // not the tap is there.
         options.passThrough = true;
+        options.queue = request.queue;
+        options.onRateChange = request.rateChanged;
         options.target = TapTarget{options_.callBundleID, options_.callInstance, false};
         options.tapPrefix = options_.label;
         return std::make_unique<CoreAudioBackend>(std::move(options));
@@ -354,34 +356,9 @@ CallStart CallCapture::Start()
         s.ticker->Start();
         auto alive = alive_;
         s.observation = environment_->Observe(control_, [this, alive](SystemChange change) {
-            if (!alive->load()) {
-                return;
+            if (alive->load()) {
+                OnSystemChange(change);
             }
-            State& now = *state_;
-            if (!now.running) {
-                return;
-            }
-            // Something changed that the tap might have been waiting for.
-            now.tapDelay = timing_.retry;
-            now.lastTapTry = 0;
-            if (change == SystemChange::Processes && now.backend) {
-                now.backend->RefreshProcesses();
-            }
-            if (change == SystemChange::ServiceRestarted) {
-                Emit(CallEvent::AudioServiceRestarted);
-            }
-            if (now.settling) {
-                return;
-            }
-            now.settling = true;
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, int64_t(timing_.settle * 1e9)),
-                control_, ^{
-                    if (!alive->load()) {
-                        return;
-                    }
-                    state_->settling = false;
-                    Reconcile(change == SystemChange::ServiceRestarted);
-                });
         });
     });
     if (result == CallStart::Started) {
@@ -391,6 +368,36 @@ CallStart CallCapture::Start()
         });
     }
     return result;
+}
+
+// Control queue.
+void CallCapture::OnSystemChange(SystemChange change)
+{
+    State& now = *state_;
+    if (!now.running) {
+        return;
+    }
+    // Something changed that the tap might have been waiting for.
+    now.tapDelay = timing_.retry;
+    now.lastTapTry = 0;
+    if (change == SystemChange::Processes && now.backend) {
+        now.backend->RefreshProcesses();
+    }
+    if (change == SystemChange::ServiceRestarted) {
+        Emit(CallEvent::AudioServiceRestarted);
+    }
+    if (now.settling) {
+        return;
+    }
+    now.settling = true;
+    auto alive = alive_;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, int64_t(timing_.settle * 1e9)), control_, ^{
+        if (!alive->load()) {
+            return;
+        }
+        state_->settling = false;
+        Reconcile(change == SystemChange::ServiceRestarted);
+    });
 }
 
 void CallCapture::Stop()
@@ -462,6 +469,14 @@ bool CallCapture::StartBackend(bool callTap)
     request.echoCancel = callTap &&
         (options_.echo == EchoMode::On ||
             (options_.echo == EchoMode::Automatic && environment_->IsPhysical(s.microphoneUID)));
+    // A rate change reaches Reconcile at once instead of at the next tick.
+    auto alive = alive_;
+    request.queue = control_;
+    request.rateChanged = [this, alive] {
+        if (alive->load()) {
+            OnSystemChange(SystemChange::Devices);
+        }
+    };
     auto backend = environment_->MakeBackend(request);
     if (!backend) {
         return false;

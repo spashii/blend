@@ -122,6 +122,40 @@ bool MicCapture::AddReference()
     return true;
 }
 
+void MicCapture::WatchRates()
+{
+    if (!options_.queue || !options_.onRateChange) {
+        return;
+    }
+    auto address = hal::Address(kAudioDevicePropertyNominalSampleRate);
+    // The aggregate has a rate of its own, and the host labels what it receives with it.
+    std::vector<AudioObjectID> devices{device_};
+    if (ioDevice_ != device_) {
+        devices.push_back(ioDevice_);
+    }
+    for (AudioObjectID device : devices) {
+        // The block owns a copy of the callback, so one still queued when Stop runs is safe.
+        auto callback = options_.onRateChange;
+        AudioObjectPropertyListenerBlock block =
+            ^(UInt32, const AudioObjectPropertyAddress*) { callback(); };
+        if (AudioObjectAddPropertyListenerBlock(device, &address, options_.queue, block) ==
+            noErr) {
+            rateListeners_.emplace_back(device, (__bridge_retained void*)block);
+        }
+    }
+}
+
+void MicCapture::UnwatchRates()
+{
+    auto address = hal::Address(kAudioDevicePropertyNominalSampleRate);
+    for (auto& [device, retained] : rateListeners_) {
+        auto block = (__bridge AudioObjectPropertyListenerBlock)retained;
+        AudioObjectRemovePropertyListenerBlock(device, &address, options_.queue, block);
+        CFBridgingRelease(retained);
+    }
+    rateListeners_.clear();
+}
+
 void MicCapture::RefreshProcesses()
 {
     if (!description_ || options_.reference != Reference::Processes) {
@@ -171,6 +205,7 @@ bool MicCapture::Start(FrameSink& sink)
         frames += processor_->BlockFrames();
     }
     sink.Prepare(hal::NominalRate(ioDevice_), frames);
+    WatchRates();
     if (AudioDeviceCreateIOProcID(ioDevice_, IOProc, this, &proc_) != noErr ||
         AudioDeviceStart(ioDevice_, proc_) != noErr) {
         Stop();
@@ -200,6 +235,7 @@ bool MicCapture::EchoCancelFailed() const
 
 void MicCapture::Stop()
 {
+    UnwatchRates();
     if (proc_) {
         AudioDeviceStop(ioDevice_, proc_);
         AudioDeviceDestroyIOProcID(ioDevice_, proc_);

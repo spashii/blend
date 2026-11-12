@@ -113,6 +113,9 @@ struct BackendRequest
     bool callTap = true;
     bool echoCancel = false;
     MicProcessor::Isolation isolation = MicProcessor::Isolation::Off;
+    // A backend that can tell calls this on `queue` the moment its device's rate changes.
+    dispatch_queue_t queue = nullptr;
+    std::function<void()> rateChanged;
 };
 
 // What a change reported by the system was about.
@@ -190,6 +193,7 @@ private:
     void StopBackend();
     void ReleasePipeline();
     void Emit(CallEvent event, std::string detail = {});
+    void OnSystemChange(SystemChange change);
     void DrainDelivery();
 
     const CallCaptureOptions options_;

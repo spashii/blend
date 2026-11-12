@@ -434,6 +434,8 @@ struct World
     bool echoCancel = false;
     std::atomic<bool> signalDone{false};
     std::function<void(SystemChange)> notify;
+    // What a device's own rate listener would call.
+    std::function<void()> rateChanged;
     dispatch_queue_t queue = nullptr;
 
     void Trigger(SystemChange change)
@@ -449,6 +451,20 @@ struct World
             dispatch_async(q, ^{ call(change); });
         }
     }
+    void TriggerRate()
+    {
+        std::function<void()> call;
+        dispatch_queue_t q;
+        {
+            std::lock_guard lock(mutex);
+            call = rateChanged;
+            q = rateQueue;
+        }
+        if (call) {
+            dispatch_async(q, ^{ call(); });
+        }
+    }
+    dispatch_queue_t rateQueue = nullptr;
     void SetMic(const std::string& uid)
     {
         std::lock_guard lock(mutex);
@@ -480,6 +496,8 @@ public:
         {
             std::lock_guard lock(world_.mutex);
             world_.startedMics.push_back(request_.microphoneUID);
+            world_.rateChanged = request_.rateChanged;
+            world_.rateQueue = request_.queue;
         }
         running_ = true;
         thread_ = std::thread([this] { Run(); });
@@ -893,6 +911,21 @@ void RecoveryTests()
             const double after = Rms(stream.me, stream.me.size() - 4800, 4800);
             Check(after > 0.1, "Me is back on the new microphone", after);
         }
+    });
+
+    WithinTime("a rate change is handled without waiting for a tick", 20, [] {
+        World world;
+        Stream stream;
+        CallCaptureTiming timing = FastTiming();
+        timing.tick = 30;
+        auto capture = MakeCapture(world, stream, timing);
+        capture->Start();
+        Sleep(100);
+        world.rate = 16000;
+        world.TriggerRate();
+        Sleep(300);
+        Check(world.starts == 2, "the device's rate listener restarts the capture", world.starts);
+        capture->Stop();
     });
 
     WithinTime("rate change", 20, [] {

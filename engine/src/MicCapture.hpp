@@ -15,7 +15,10 @@
 
 #include <CoreAudio/CoreAudio.h>
 
+#include <dispatch/dispatch.h>
+
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -47,6 +50,10 @@ public:
         // Reference::Processes only. The tap is named "<tapPrefix>: <bundle id>".
         TapTarget target;
         std::string tapPrefix;
+        // Called on `queue` as soon as the device's or the aggregate's sample rate changes,
+        // so a host need not wait for its next NeedsRestart poll. Not set: not watched.
+        dispatch_queue_t queue = nullptr;
+        std::function<void()> onRateChange;
     };
 
     explicit MicCapture(Options options);
@@ -83,6 +90,8 @@ private:
         const AudioTimeStamp*, AudioBufferList*, const AudioTimeStamp*, void* context);
     static void Emit(void* context, const float* me, const float* farEnd, uint32_t frames);
     bool AddReference();
+    void WatchRates();
+    void UnwatchRates();
 
     const Options options_;
     FrameSink* sink_ = nullptr;
@@ -101,6 +110,8 @@ private:
     double rate_ = 0;
     double ioRate_ = 0;
     std::unique_ptr<MicProcessor> processor_;
+    // Nominal-rate listeners: each device with its retained AudioObjectPropertyListenerBlock.
+    std::vector<std::pair<AudioObjectID, void*>> rateListeners_;
 };
 
 } // namespace blend
