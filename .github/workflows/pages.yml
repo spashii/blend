@@ -24,6 +24,16 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      # Pages caches every file for 10 minutes, so each deploy must give the stylesheet a new URL.
+      - name: Stamp the commit into ?v= links
+        shell: bash
+        run: |
+          v="$(git rev-parse --short HEAD)"
+          find site -name '*.html' -exec sed -i "s/__V__/${v}/g" {} +
+          if grep -rn '__V__' site; then
+            echo "unreplaced __V__ placeholder" >&2
+            exit 1
+          fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

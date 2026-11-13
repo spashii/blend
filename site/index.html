@@ -121,7 +121,7 @@
 ]
 </script>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="https://spashii.github.io/ds/v1.css">
+<link rel="stylesheet" href="https://spashii.github.io/ds/v1.css?v=__V__">
 <style>
   /* Blend Mic page CSS: only the drawings of the app. Layout, type, colour and components come from ds/v1.css.
      The drawings keep the app's own system colours (status green and red) through the --app-* values
@@ -167,12 +167,19 @@
   .line.you .who { color: var(--text); }
   .caret::after { content: ""; display: inline-block; width: 1.5px; height: 1em; margin-left: 1px; vertical-align: -2px; background: var(--text); animation: blink 1s steps(1) infinite; }
 
-  /* Screenshots of the app: each is cropped to the control its caption names, one row each. */
-  .shots { display: grid; gap: var(--sp-8); }
-  .shots figure { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) 17rem; gap: var(--sp-6); align-items: center; }
-  .shots .frame { padding: var(--sp-4); }
-  .shots img.narrow { width: 88%; margin-inline: auto; }
-  .shots img { display: block; width: 100%; height: auto; border-radius: var(--radius-inner); box-shadow: var(--app-ring); }
+  /* Screenshots of the app sit in the plain ds well the way the .menu drawing does: a rounded piece of
+     app UI with the app's ring, centred, at half its pixel size. The captures are 2x, so this is 1:1
+     on a retina screen and every shot has the same scale. On a narrow well they shrink, never grow. */
+  .well.shot { display: flex; align-items: center; justify-content: center; padding: 0 var(--sp-3); }
+  .well.shot picture { display: block; max-width: 100%; }
+  .well.shot img { display: block; max-width: 100%; height: auto; border-radius: 10px; box-shadow: var(--app-ring); }
+  .well.shot.add img { width: 318px; }
+  .well.shot.split img { width: 240px; }
+  .well.shot.check img { width: 315px; }
+
+  /* And more: one line per item between hairlines, the same rule the Questions list draws. */
+  .more-list { list-style: none; padding: 0; border-top: 1px solid var(--hairline); }
+  .more-list li { padding: var(--sp-3) 0; border-bottom: 1px solid var(--hairline); }
 
   /* Drawings at the top of each card */
   .art { padding: 14px var(--sp-4); display: flex; flex-direction: column; justify-content: center; gap: var(--sp-2); overflow: hidden; }
@@ -201,9 +208,6 @@
   @media (max-width: 834px) { .demo { justify-self: center; } }
   @media (max-width: 734px) {
     .demo { padding: var(--sp-4); }
-    .shots { gap: var(--sp-7); }
-    .shots figure { grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); }
-    .shots .frame { padding: var(--sp-4); }
     .transcript { margin-left: var(--sp-4); }
   }
 </style>
@@ -250,57 +254,71 @@
     <p class="aside">Looking for dictation, or a way to transcribe your calls with Blend Mic? <a href="https://spashii.github.io/dictate/?utm_source=blend&amp;utm_medium=website&amp;utm_campaign=hero">Try Dictate.</a></p>
   </section>
 
-  <section class="shots">
-    <figure>
-      <div class="frame"><picture><source srcset="screens/crop-add-dark.png" media="(prefers-color-scheme: dark)"><img src="screens/crop-add-light.png" alt="The Add a source sheet: inputs, system audio, and each app playing sound with a live meter" width="880" height="652" loading="lazy"></picture></div>
-      <figcaption>Add your mic, one app, or everything your Mac plays.</figcaption>
-    </figure>
-    <figure>
-      <div class="frame"><picture><source srcset="screens/crop-split-narrow-dark.png" media="(prefers-color-scheme: dark)"><img src="screens/crop-split-narrow-light.png" alt="Split by channel switched on: microphone on the left, Zoom on the right" width="880" height="174" loading="lazy"></picture></div>
-      <figcaption>Split mode: you on the left, the call on the right.</figcaption>
-    </figure>
-    <figure>
-      <div class="frame"><picture><source srcset="screens/crop-check-dark.png" media="(prefers-color-scheme: dark)"><img class="narrow" src="screens/crop-check-light.png" alt="The menu bar panel: a mix called Calls with a slider and meter for the microphone and Music, and the button to hear it" width="610" height="320" loading="lazy"></picture></div>
-      <figcaption>Check a mix from the menu bar to hear what it sounds like.</figcaption>
-    </figure>
+  <section>
+    <h2>What it does</h2>
+    <div class="cards">
+      <div class="card">
+        <div class="well shot add"><picture><source srcset="screens/shot-add-dark.png" media="(prefers-color-scheme: dark)"><img src="screens/shot-add-light.png" alt="The Add a source sheet: System audio, and Zoom with a live meter" width="636" height="256" loading="lazy" decoding="async"></picture></div>
+        <h3>Any sound on your Mac</h3>
+        <p>Add your mic, one app, or everything your Mac plays.</p>
+      </div>
+      <div class="card">
+        <div class="well shot split"><picture><source srcset="screens/shot-split-dark.png" media="(prefers-color-scheme: dark)"><img src="screens/shot-split-light.png" alt="Split by channel: microphone on the left, Zoom on the right" width="480" height="96" loading="lazy" decoding="async"></picture></div>
+        <h3>Split mode</h3>
+        <p>You on the left, the call on the right.</p>
+      </div>
+      <div class="card">
+        <div class="well shot check"><picture><source srcset="screens/shot-check-dark.png" media="(prefers-color-scheme: dark)"><img src="screens/shot-check-light.png" alt="The menu bar panel: a mix called Calls with a slider and meter for the microphone and Music, and the button to hear it" width="630" height="226" loading="lazy" decoding="async"></picture></div>
+        <h3>Hear a mix first</h3>
+        <p>Live on headphones, or a five second playback on speakers.</p>
+      </div>
+      <div class="card">
+        <div class="art well" aria-hidden="true">
+          <div class="menu"><div>MacBook Pro Microphone</div><div class="picked">Blend Mic (Calls)</div><div>Blend Mic (Discord)</div></div>
+        </div>
+        <h3>A mic in every app</h3>
+        <p>Up to 16 mixes, each a microphone any app can pick.</p>
+      </div>
+      <div class="card">
+        <div class="art well" aria-hidden="true">
+          <div class="toggle-row"><span>Lower other sources while I talk</span><span class="switch on"></span></div>
+          <div class="row"><span>You</span><div class="bar"><span style="width:78%"></span></div></div>
+          <div class="row"><span>Music</span><div class="bar"><span class="was" style="width:70%"></span><span style="width:22%"></span></div></div>
+        </div>
+        <h3>Music ducks when you talk</h3>
+        <p>Turn it on for a mix, and the other sources drop while you speak.</p>
+      </div>
+      <div class="card">
+        <div class="art well" aria-hidden="true">
+          <div class="tag">System audio</div>
+          <div class="chips"><span class="chip">Music</span><span class="chip">Safari</span><span class="chip out">Zoom</span></div>
+        </div>
+        <h3>The call never hears itself</h3>
+        <p>System audio leaves out the app using the mix, so the other side hears no echo.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="more measure">
+    <h2>And more</h2>
+    <ul class="more-list">
+      <li>A volume slider and a live meter for every source.</li>
+      <li>Mute one source, or a whole mix, in one click.</li>
+      <li>Echo cancellation and voice isolation, set for each mic.</li>
+      <li>A limiter on every mix keeps a loud call from clipping.</li>
+      <li>Call apps such as Zoom, Discord and FaceTime get their own group when you add a source.</li>
+      <li>Add two Firefox profiles as two separate sources.</li>
+      <li>Unplug a mic or quit an app, and it rejoins the mix when it comes back.</li>
+      <li>The menu bar shows which app is using each mix.</li>
+      <li>When a source stops working, the menu bar icon shows a badge and the panel says why.</li>
+      <li>Quitting asks first, and updates wait, while an app is using a mix.</li>
+      <li>Open at login.</li>
+    </ul>
   </section>
 
   <section class="why measure">
+    <h2 class="sr">Why I made it</h2>
     <p>I wanted my own transcription app to hear my online calls with my headphones on. BlackHole needed a lot of setup before anything worked, and Loopback costs $99, so I made one that sits in the menu bar. It takes an app's sound without rerouting it, so you keep hearing it.</p>
-  </section>
-
-  <section class="cards">
-    <div class="card">
-      <div class="art well" aria-hidden="true">
-        <div class="menu"><div>MacBook Pro Microphone</div><div class="picked">Blend Mic (Calls)</div><div>Blend Mic (Discord)</div></div>
-      </div>
-      <h3>A mic in every app</h3>
-      <p>Each mix shows up as Blend Mic (its name) in Discord, Zoom or your dictation app.</p>
-    </div>
-    <div class="card">
-      <div class="art well" aria-hidden="true">
-        <div class="toggle-row"><span>Lower other sources while I talk</span><span class="switch on"></span></div>
-        <div class="row"><span>You</span><div class="bar"><span style="width:78%"></span></div></div>
-        <div class="row"><span>Music</span><div class="bar"><span class="was" style="width:70%"></span><span style="width:22%"></span></div></div>
-      </div>
-      <h3>Music ducks when you talk</h3>
-      <p>Off by default. Turn it on for a mix, and the other sources drop while you speak.</p>
-    </div>
-    <div class="card">
-      <div class="art well" aria-hidden="true">
-        <div class="tag">System audio</div>
-        <div class="chips"><span class="chip">Music</span><span class="chip">Safari</span><span class="chip out">Zoom</span></div>
-      </div>
-      <h3>The call never hears itself</h3>
-      <p>System audio leaves out the app using the mix, so the other side hears no echo.</p>
-    </div>
-    <div class="card">
-      <div class="art well" aria-hidden="true">
-        <div class="chips"><span class="chip">Blend Mic (Calls)</span><span class="chip">Blend Mic (Discord)</span><span class="chip">Blend Mic (Stream)</span><span class="chip out" style="text-decoration:none">13 more</span></div>
-      </div>
-      <h3>Up to 16 mixes</h3>
-      <p>One for Discord, another for your dictation app, each with its own sources.</p>
-    </div>
   </section>
 
   <section class="faq" id="questions">
