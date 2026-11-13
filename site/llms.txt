@@ -10,7 +10,7 @@
 - Added delay: about 30 ms, or about 75 ms with echo cancellation on, measured on Apple silicon.
 - Installs a Core Audio plug-in that runs in user space, not a kernel extension. Uninstall in its settings removes it.
 - Alternatives it replaces: BlackHole (free, no mixer, set up in Audio MIDI Setup) and Loopback ($99).
-- Privacy: audio never leaves the Mac, no accounts, no analytics in the app.
+- Privacy: your audio stays on the Mac, no accounts, no analytics in the app.
 
 ## Links
 

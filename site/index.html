@@ -20,8 +20,8 @@
 <meta name="twitter:description" content="Mix your voice with a call or any app's sound, so a local dictation app transcribes both sides, even with headphones on. Free and open source.">
 <meta name="twitter:image" content="https://spashii.github.io/blend/og.png">
 <meta property="og:image:alt" content="Blend Mic: a free virtual microphone for Mac">
-<meta name="theme-color" content="#f7f7f8" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#111113" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <script type="application/ld+json">
 [
  {
@@ -44,7 +44,7 @@
   },
   "author": {
    "@type": "Person",
-   "name": "spashii",
+   "name": "Sameer",
    "url": "https://github.com/spashii"
   }
  },
@@ -121,212 +121,164 @@
 ]
 </script>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://spashii.github.io/ds/v1.css">
 <style>
+  /* Blend Mic page CSS: only the drawings of the app. Layout, type, colour and components come from ds/v1.css.
+     The drawings keep the app's own system colours (status green and red) through the --app-* values
+     below. Their one blue is the system's --primary, and nothing drawn that could pass for a button
+     or chip uses it. */
   :root {
-    --bg: #f7f7f8; --card: #fff; --fg: #0b0b0c; --app-muted: #6b6b73; --line: #e8e8ea;
-    --accent: #1f5fe0; --button: #2563eb; --green: #34c759; --glass: rgba(255,255,255,.62); --frame: #e9e9ed;
-    --ring: 0 2px 6px rgba(0,0,0,.06), 0 0 0 1px rgba(0,0,0,.05);
-    --ring-lg: 0 30px 60px -28px rgba(16,24,40,.3), 0 0 0 1px rgba(0,0,0,.05);
-    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
+    --app-win: #ffffff; --app-control: #ffffff; --app-muted: #6e6e73; --app-track: #e5e5ea;
+    --app-fill: rgba(120,120,128,.16); --app-green: #34c759; --app-red: #ff3b30;
+    --app-ring: 0 1px 3px rgba(0,0,0,.08), 0 0 0 1px rgba(0,0,0,.06);
+    --app-float: 0 30px 60px -28px rgba(16,24,40,.32), 0 0 0 1px rgba(0,0,0,.06);
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --accent: #7aa8ff; --bg: #111113; --card: #1c1c1f; --fg: #f2f2f4; --app-muted: #9a9aa3; --line: #2c2c31;
-      --glass: rgba(28,28,31,.6); --frame: #1f1f23;
-      --ring: 0 2px 6px rgba(0,0,0,.3), 0 0 0 1px rgba(255,255,255,.07);
-      --ring-lg: 0 30px 60px -28px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.08);
+      --app-win: #2c2c2e; --app-control: #3a3a3c; --app-muted: #98989d; --app-track: #3a3a3c;
+      --app-fill: rgba(120,120,128,.32); --app-green: #30d158; --app-red: #ff453a;
+      --app-ring: 0 1px 3px rgba(0,0,0,.4), 0 0 0 1px rgba(255,255,255,.08);
+      --app-float: 0 30px 60px -28px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.1);
     }
   }
-  * { box-sizing: border-box; margin: 0; font-weight: 400; font-style: normal; }
-  html { scroll-padding-top: 88px; }
-
-  /* Four text styles only: h1, h2, h3 and body, in one text colour. Links underline only on hover and focus. The primary button is the only coloured element. Drawings of the app (.demo, .art) keep the app's own colours and sizes, through the --app-* tokens. */
-  body { background: var(--bg); color: var(--fg); font: 17px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
-  h1 { font-size: 56px; line-height: 1.05; letter-spacing: -.035em; font-weight: 700; }
-  h2 { font-size: 28px; line-height: 1.2; letter-spacing: -.02em; font-weight: 600; }
-  h3 { font-size: 21px; line-height: 1.4; letter-spacing: -.01em; font-weight: 600; }
-  a { color: inherit; text-decoration: none; }
-  a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; border-radius: 6px; }
-  a { text-underline-offset: 3px; }
-  a:hover, a:focus-visible { text-decoration: underline; }
   .app-muted { color: var(--app-muted); }
-  /* Spacing scale: 8 inside a group, 16 between related items, 24 to 32 within a section, --section between sections. */
-  :root { --section: 112px; }
-  main { max-width: 960px; margin: 0 auto; padding: 0 24px var(--section); }
-  main > section + section { margin-top: var(--section); }
 
-  .nav { position: fixed; z-index: 10; top: 12px; left: 50%; transform: translateX(-50%); width: min(912px, calc(100% - 24px)); display: flex; align-items: center; gap: 16px; padding: 8px 8px 8px 14px; border-radius: 16px; background: var(--glass); -webkit-backdrop-filter: saturate(180%) blur(18px); backdrop-filter: saturate(180%) blur(18px); box-shadow: var(--ring); }
-  .brand { display: flex; align-items: center; gap: 8px; }
-    .brand img { width: 24px; height: 24px; }
-  .nav .links { margin-left: auto; display: flex; align-items: center; gap: 16px; }
-
-  .button { display: inline-block; padding: 12px 20px; border-radius: 12px; }
-  .button:hover, .button:focus-visible { text-decoration: none; }
-  .button.primary { background: var(--button); color: #fff; }
-  .button.small { padding: 6px 14px; border-radius: 10px; }
-
-  .hero { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; padding-top: 136px; }
-  .lede { margin-top: 24px; max-width: 36ch; }
-  .dictate { margin-top: 24px; max-width: 44ch; }
-  .actions { display: flex; align-items: center; gap: 24px; margin-top: 32px; flex-wrap: wrap; }
-  .meta { margin-top: 16px; }
-
-  /* Hero demo: a call plays into a mix while a dictation app transcribes both sides. */
-  .demo { position: relative; width: 100%; max-width: 440px; justify-self: center; }
-  .card { background: var(--card); border-radius: 16px; box-shadow: var(--ring-lg); padding: 16px 18px; }
-  .card header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
-  .card header .status { color: var(--app-muted); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
-  .rec { width: 8px; height: 8px; border-radius: 50%; background: #ff3b30; animation: blink 1.2s infinite; }
+  /* Hero: a call plays into a mix while a dictation app transcribes both sides. */
+  .demo { position: relative; width: 100%; max-width: 440px; justify-self: end; padding: var(--sp-5); }
+  .win { background: var(--app-win); border-radius: var(--radius-inner); box-shadow: var(--app-float); padding: var(--sp-4) 18px; }
+  .win header { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); margin-bottom: 10px; }
+  .win header .status { color: var(--app-muted); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--app-green); }
+  .rec { width: 8px; height: 8px; border-radius: 50%; background: var(--app-red); animation: blink 1.2s infinite; }
   @keyframes blink { 50% { opacity: .3; } }
-  .source + .source { margin-top: 12px; }
+  .source + .source { margin-top: var(--sp-3); }
   .source .name { display: flex; justify-content: space-between; margin-bottom: 6px; }
-  .slider { position: relative; height: 4px; border-radius: 2px; background: var(--line); }
-  .slider .fill { position: absolute; inset: 0 auto 0 0; border-radius: 2px; background: var(--accent); }
+  .slider { position: relative; height: 4px; border-radius: 2px; background: var(--app-track); }
+  .slider .fill { position: absolute; inset: 0 auto 0 0; border-radius: 2px; background: var(--primary); }
   .slider .knob { position: absolute; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
-  .meter { height: 3px; margin-top: 6px; border-radius: 2px; background: var(--line); overflow: hidden; }
-  .meter .level { display: block; height: 100%; width: 4%; border-radius: 2px; background: var(--green); transition: width .35s ease-out; }
-  .hint { margin: -4px 0 12px; }
-  .ears { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
-  .transcript { margin: -8px 0 0 20px; position: relative; min-height: 196px; }
-  .line { display: flex; gap: 10px; margin-top: 8px; opacity: 0; transform: translateY(4px); transition: opacity .3s, transform .3s; }
+  .meter { height: 3px; margin-top: 6px; border-radius: 2px; background: var(--app-track); overflow: hidden; }
+  .meter .level { display: block; height: 100%; width: 4%; border-radius: 2px; background: var(--app-green); transition: width .35s ease-out; }
+  .hint { margin: -4px 0 var(--sp-3); }
+  .ears { margin-top: 14px; padding-top: var(--sp-3); border-top: 1px solid var(--app-track); }
+  .transcript { margin: calc(-1 * var(--sp-2)) 0 0 var(--sp-5); position: relative; min-height: 196px; }
+  .line { display: flex; gap: 10px; margin-top: var(--sp-2); opacity: 0; transform: translateY(4px); transition: opacity .3s, transform .3s; }
   .line.on { opacity: 1; transform: none; }
   .line .who { flex: 0 0 40px; color: var(--app-muted); }
-  .line.you .who { color: var(--accent); }
-  .caret::after { content: ""; display: inline-block; width: 1.5px; height: 1em; margin-left: 1px; vertical-align: -2px; background: var(--fg); animation: blink 1s steps(1) infinite; }
+  .line.you .who { color: var(--text); }
+  .caret::after { content: ""; display: inline-block; width: 1.5px; height: 1em; margin-left: 1px; vertical-align: -2px; background: var(--text); animation: blink 1s steps(1) infinite; }
 
-  .shots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; align-items: start; }
-  .shots figure { margin: 0; }
-  .frame { position: relative; aspect-ratio: 4 / 3; border-radius: 16px; background: var(--frame); }
-  .frame img { position: absolute; inset: 20px; width: calc(100% - 40px); height: calc(100% - 40px); object-fit: contain; filter: drop-shadow(0 8px 16px rgba(0,0,0,.18)); }
-  .shots figcaption { margin-top: 16px; }
+  /* Screenshots of the app: each is cropped to the control its caption names, one row each. */
+  .shots { display: grid; gap: var(--sp-8); }
+  .shots figure { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) 17rem; gap: var(--sp-6); align-items: center; }
+  .shots .frame { padding: var(--sp-4); }
+  .shots img.narrow { width: 88%; margin-inline: auto; }
+  .shots img { display: block; width: 100%; height: auto; border-radius: var(--radius-inner); box-shadow: var(--app-ring); }
 
-  .why, .bottom { max-width: 640px; }
-
-  .points { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
-  .point { background: var(--card); border-radius: 16px; box-shadow: var(--ring); padding: 24px; }
-  .point p { margin-top: 8px; }
-  .art { height: 132px; margin-bottom: 24px; padding: 14px 16px; border-radius: 12px; background: var(--frame); display: flex; flex-direction: column; justify-content: center; gap: 8px; overflow: hidden; }
+  /* Drawings at the top of each card */
+  .art { padding: 14px var(--sp-4); display: flex; flex-direction: column; justify-content: center; gap: var(--sp-2); overflow: hidden; }
   .art .row { display: flex; align-items: center; gap: 10px; }
   .art .row > span:first-child { flex: 0 0 64px; color: var(--app-muted); }
-  .art .bar { position: relative; flex: 1; height: 6px; border-radius: 3px; background: var(--line); }
-  .art .bar span { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--green); }
+  .art .bar { position: relative; flex: 1; height: 6px; border-radius: 3px; background: var(--app-track); }
+  .art .bar span { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--app-green); }
   .art .bar .was { background: none; box-shadow: inset 0 0 0 1px var(--app-muted); opacity: .5; }
   .art .tag { color: var(--app-muted); }
-  .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 6px; }
-  .switch { flex: 0 0 auto; position: relative; width: 38px; height: 22px; border-radius: 11px; background: var(--line); }
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); padding-bottom: 6px; }
+  .switch { flex: 0 0 auto; position: relative; width: 38px; height: 22px; border-radius: 11px; background: var(--app-track); }
   .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
-  .switch.on { background: var(--green); }
+  .switch.on { background: var(--app-green); }
   .switch.on::after { left: 18px; }
-  .menu { align-self: stretch; border-radius: 10px; background: var(--card); box-shadow: var(--ring); padding: 4px; }
+  .menu { align-self: stretch; border-radius: 10px; background: var(--app-control); box-shadow: var(--app-ring); padding: 4px; }
   .menu div { padding: 3px 10px; border-radius: 6px; white-space: nowrap; }
-  .menu .picked { background: var(--button); color: #fff; }
-  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-  .chip { padding: 4px 12px; border-radius: 999px; background: var(--card); box-shadow: var(--ring); white-space: nowrap; }
-  .chip.out { color: var(--app-muted); text-decoration: line-through; box-shadow: inset 0 0 0 1px var(--line); background: none; }
+  .menu .picked { background: var(--app-fill); }
+  .chips { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+  .chip { padding: 4px 12px; border-radius: 999px; background: var(--app-control); box-shadow: var(--app-ring); white-space: nowrap; }
+  .chip.out { color: var(--app-muted); text-decoration: line-through; box-shadow: inset 0 0 0 1px var(--app-track); background: none; }
 
+  .bottom .get, .bottom .brew { margin-top: var(--sp-6); }
 
-  .faq { max-width: 640px; }
-  .faq-list { margin-top: 24px; border-top: 1px solid var(--line); }
-  .faq details { border-bottom: 1px solid var(--line); }
-  .faq summary { display: flex; justify-content: space-between; gap: 16px; padding: 16px 0; cursor: pointer; list-style: none; }
-  .faq summary::-webkit-details-marker { display: none; }
-  .faq summary::after { content: "+"; }
-  .faq details[open] summary::after { content: "\2212"; }
-  .faq details p { padding-bottom: 16px; }
-  .bottom .actions { margin-top: 32px; }
-  .brew { margin-top: 32px; }
-  .cmd { position: relative; margin-top: 8px; border-radius: 12px; background: var(--card); box-shadow: var(--ring); }
-  .cmd pre { margin: 0; padding: 14px 88px 14px 16px; overflow-x: auto; font: 17px/1.6 ui-monospace, "SF Mono", Menlo, monospace; color: var(--fg); }
-  .copy { position: absolute; top: 8px; right: 8px; padding: 4px 12px; border: 0; border-radius: 8px; font: inherit; color: var(--fg); background: var(--frame); cursor: pointer; }
-  .copy:hover, .copy:focus-visible { box-shadow: inset 0 0 0 1px var(--fg); }
-  footer.site { max-width: 960px; margin: 0 auto; border-top: 1px solid var(--line); padding: 32px 24px 48px; }
-  footer.site .work { display: grid; gap: 16px; margin: 24px 0 32px; max-width: 640px; }
-  footer.site .work .point { display: flex; gap: 16px; align-items: flex-start; }
-  footer.site .work img { flex: 0 0 auto; border-radius: 12px; }
-  footer.site .work .point:hover, footer.site .work .point:focus-visible { text-decoration: none; box-shadow: inset 0 0 0 1.5px var(--fg); }
-  footer.site .work .point:hover h3, footer.site .work .point:focus-visible h3 { text-decoration: underline; text-underline-offset: 3px; }
-
-  @media (max-width: 780px) {
-    :root { --section: 72px; }
-    .hero { grid-template-columns: 1fr; gap: 48px; padding-top: 104px; }
-    h1 { font-size: 42px; }
-    .hero .actions { gap: 16px; }
-    .dictate { margin-top: 16px; }
-    h2 { font-size: 24px; }
-    h3 { font-size: 20px; }
-    .shots, .points { grid-template-columns: 1fr; }
-    .transcript { margin-left: 16px; }
+  /* Dictate line: under both hero columns, so it stays on one line on a desktop. */
+  .hero > .aside { grid-column: 1 / -1; margin-top: 0; }
+  @media (max-width: 834px) { .demo { justify-self: center; } }
+  @media (max-width: 734px) {
+    .demo { padding: var(--sp-4); }
+    .shots { gap: var(--sp-7); }
+    .shots figure { grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); }
+    .shots .frame { padding: var(--sp-4); }
+    .transcript { margin-left: var(--sp-4); }
   }
-  @media (max-width: 420px) { .nav .links > a:not(.button) { display: none; } }
 </style>
 </head>
 <body>
-<nav class="nav">
-  <a class="brand" href="#"><img src="icon.svg" alt="">Blend Mic</a>
+<a class="skip" href="#main">Skip to content</a>
+<nav class="nav" aria-label="Main">
+  <a class="brand" href="./"><img src="icon.svg" alt="" width="24" height="24"><span class="name">Blend Mic</span></a>
   <div class="links">
+    <a href="#questions">Questions</a>
     <a href="https://github.com/spashii/blend">GitHub</a>
     <a class="button primary small" href="https://github.com/spashii/blend/releases/latest/download/Blend.dmg">Download</a>
   </div>
 </nav>
 
-<main>
+<main id="main">
   <section class="hero">
     <div>
       <h1>Build your own mic.</h1>
       <p class="lede">A local dictation app only hears your microphone, so with headphones on it never hears the call. Blend Mic mixes your voice and the call into one mic, so a dictation app like Handy or OpenSuperWhisper transcribes both sides on your Mac.</p>
-      <div class="actions">
-        <a class="button primary" href="https://github.com/spashii/blend/releases/latest/download/Blend.dmg">Download for Mac</a>
-        <a href="https://github.com/spashii/blend/releases">GitHub releases</a>
+      <div class="get">
+        <div class="actions">
+          <a class="button primary" href="https://github.com/spashii/blend/releases/latest/download/Blend.dmg">Download for Mac</a>
+          <a class="button secondary" href="https://github.com/spashii/blend/releases">GitHub releases</a>
+        </div>
+        <p class="meta"><span>Free and open source (MIT)</span></p>
+        <p class="meta"><span>Apple silicon, macOS 15 or later</span></p>
       </div>
-      <p class="meta">Free and open source (MIT) · Apple silicon, macOS 15 or later</p>
-      <p class="dictate"><a href="https://spashii.github.io/dictate/?utm_source=blend&amp;utm_medium=website&amp;utm_campaign=hero">Looking for dictation, or a way to transcribe your calls with Blend Mic? Try Dictate.</a></p>
     </div>
 
-    <div class="demo" role="img" aria-label="A Blend Mic mix of your microphone and the call in Google Chrome, heard on AirPods, while a dictation app transcribes both sides">
-      <div class="card">
+    <div class="demo frame" role="img" aria-label="A Blend Mic mix of your microphone and the call in Google Chrome, heard on AirPods, while a dictation app transcribes both sides">
+      <div class="win">
         <header><h3>Blend Mic (Calls)</h3><span class="status"><span class="dot"></span>in use</span></header>
         <p class="hint app-muted">A new mic, made of:</p>
         <div class="source"><div class="name">MacBook Pro Microphone</div><div class="slider"><span class="fill" style="width:80%"></span><span class="knob" style="left:80%"></span></div><div class="meter"><span class="level" id="m-you"></span></div></div>
         <div class="source"><div class="name">Google Chrome <span class="app-muted">the call</span></div><div class="slider"><span class="fill" style="width:65%"></span><span class="knob" style="left:65%"></span></div><div class="meter"><span class="level" id="m-call"></span></div></div>
         <div class="ears app-muted">You hear the call on AirPods Pro</div>
       </div>
-      <div class="card transcript">
+      <div class="win transcript">
         <header><h3>Your dictation app (using Blend Mic)</h3><span class="status"><span class="rec"></span></span></header>
         <div id="lines"></div>
       </div>
     </div>
+    <p class="aside">Looking for dictation, or a way to transcribe your calls with Blend Mic? <a href="https://spashii.github.io/dictate/?utm_source=blend&amp;utm_medium=website&amp;utm_campaign=hero">Try Dictate.</a></p>
   </section>
 
   <section class="shots">
     <figure>
-      <div class="frame"><picture><source srcset="screens/03-add-source-dark.png" media="(prefers-color-scheme: dark)"><img src="screens/03-add-source-light.png" alt="The Add a source sheet: inputs, system audio, and each app playing sound with a live meter" loading="lazy"></picture></div>
+      <div class="frame"><picture><source srcset="screens/crop-add-dark.png" media="(prefers-color-scheme: dark)"><img src="screens/crop-add-light.png" alt="The Add a source sheet: inputs, system audio, and each app playing sound with a live meter" width="880" height="652" loading="lazy"></picture></div>
       <figcaption>Add your mic, one app, or everything your Mac plays.</figcaption>
     </figure>
     <figure>
-      <div class="frame"><picture><source srcset="screens/04-split-dark.png" media="(prefers-color-scheme: dark)"><img src="screens/04-split-light.png" alt="A mix with Split by channel on: the microphone on the left channel and the call on the right" loading="lazy"></picture></div>
+      <div class="frame"><picture><source srcset="screens/crop-split-narrow-dark.png" media="(prefers-color-scheme: dark)"><img src="screens/crop-split-narrow-light.png" alt="Split by channel switched on: microphone on the left, Zoom on the right" width="880" height="174" loading="lazy"></picture></div>
       <figcaption>Split mode: you on the left, the call on the right.</figcaption>
     </figure>
     <figure>
-      <div class="frame"><picture><source srcset="screens/05-check-dark.png" media="(prefers-color-scheme: dark)"><img src="screens/05-check-light.png" alt="The menu bar panel: a mix called Calls with a slider and meter for the microphone and Music, and its Check button" loading="lazy"></picture></div>
+      <div class="frame"><picture><source srcset="screens/crop-check-dark.png" media="(prefers-color-scheme: dark)"><img class="narrow" src="screens/crop-check-light.png" alt="The menu bar panel: a mix called Calls with a slider and meter for the microphone and Music, and the button to hear it" width="610" height="320" loading="lazy"></picture></div>
       <figcaption>Check a mix from the menu bar to hear what it sounds like.</figcaption>
     </figure>
   </section>
 
-  <section class="why">
+  <section class="why measure">
     <p>I wanted my own transcription app to hear my online calls with my headphones on. BlackHole needed a lot of setup before anything worked, and Loopback costs $99, so I made one that sits in the menu bar. It takes an app's sound without rerouting it, so you keep hearing it.</p>
   </section>
 
-  <section class="points">
-    <div class="point">
-      <div class="art" aria-hidden="true">
+  <section class="cards">
+    <div class="card">
+      <div class="art well" aria-hidden="true">
         <div class="menu"><div>MacBook Pro Microphone</div><div class="picked">Blend Mic (Calls)</div><div>Blend Mic (Discord)</div></div>
       </div>
       <h3>A mic in every app</h3>
       <p>Each mix shows up as Blend Mic (its name) in Discord, Zoom or your dictation app.</p>
     </div>
-    <div class="point">
-      <div class="art" aria-hidden="true">
+    <div class="card">
+      <div class="art well" aria-hidden="true">
         <div class="toggle-row"><span>Lower other sources while I talk</span><span class="switch on"></span></div>
         <div class="row"><span>You</span><div class="bar"><span style="width:78%"></span></div></div>
         <div class="row"><span>Music</span><div class="bar"><span class="was" style="width:70%"></span><span style="width:22%"></span></div></div>
@@ -334,16 +286,16 @@
       <h3>Music ducks when you talk</h3>
       <p>Off by default. Turn it on for a mix, and the other sources drop while you speak.</p>
     </div>
-    <div class="point">
-      <div class="art" aria-hidden="true">
+    <div class="card">
+      <div class="art well" aria-hidden="true">
         <div class="tag">System audio</div>
         <div class="chips"><span class="chip">Music</span><span class="chip">Safari</span><span class="chip out">Zoom</span></div>
       </div>
       <h3>The call never hears itself</h3>
       <p>System audio leaves out the app using the mix, so the other side hears no echo.</p>
     </div>
-    <div class="point">
-      <div class="art" aria-hidden="true">
+    <div class="card">
+      <div class="art well" aria-hidden="true">
         <div class="chips"><span class="chip">Blend Mic (Calls)</span><span class="chip">Blend Mic (Discord)</span><span class="chip">Blend Mic (Stream)</span><span class="chip out" style="text-decoration:none">13 more</span></div>
       </div>
       <h3>Up to 16 mixes</h3>
@@ -351,7 +303,7 @@
     </div>
   </section>
 
-  <section class="faq">
+  <section class="faq" id="questions">
     <h2>Questions</h2>
     <div class="faq-list">
       <details>
@@ -389,35 +341,42 @@
     </div>
   </section>
 
-  <section class="bottom">
-    <p>Your audio never leaves your Mac, and there are no accounts. Blend Mic checks for updates once a day, and the update server counts those checks by app, version and country and never stores your IP address. This page counts visits with Cloudflare Web Analytics, without cookies.</p>
-    <div class="actions">
-      <a class="button primary" href="https://github.com/spashii/blend/releases/latest/download/Blend.dmg">Download for Mac</a>
-      <a href="https://github.com/spashii/blend/releases">GitHub releases</a>
+  <section class="bottom measure">
+    <p>Your audio stays on your Mac, and there are no accounts. Blend Mic checks for updates once a day, and the update server counts those checks by app, version and country and never stores your IP address. This page counts visits with Cloudflare Web Analytics, without cookies.</p>
+    <div class="get">
+      <div class="actions">
+        <a class="button primary" href="https://github.com/spashii/blend/releases/latest/download/Blend.dmg">Download for Mac</a>
+        <a class="button secondary" href="https://github.com/spashii/blend/releases">GitHub releases</a>
+      </div>
+      <p class="meta"><span>Free and open source (MIT)</span></p>
+      <p class="meta"><span>Apple silicon, macOS 15 or later</span></p>
     </div>
     <div class="brew">
-      <p>Or with Homebrew:</p>
-      <div class="cmd"><pre id="brew">brew tap spashii/blend https://github.com/spashii/blend
+      <div class="code-head"><p>Or with Homebrew:</p><button type="button" class="button secondary small copy" data-copy="brew" aria-label="Copy the Homebrew commands">Copy</button></div>
+      <div class="code"><pre id="brew">brew tap spashii/blend https://github.com/spashii/blend
 brew trust spashii/blend
-brew install --cask blend</pre><button type="button" class="copy" data-copy="brew" aria-label="Copy the Homebrew commands">Copy</button></div>
+brew install --cask blend</pre></div>
+    </div>
+  </section>
+
+  <section class="other">
+    <h2>My other work</h2>
+    <div class="work">
+      <a class="work-item" href="https://dembrane.com">
+        <img src="icons/dembrane.png" alt="" width="52" height="52">
+        <div><h3>dembrane</h3>
+        <p>Makes sense of big, messy conversations, so everyone can shape what happens next.</p></div>
+      </a>
+      <a class="work-item" href="https://spashii.github.io/dictate/?utm_source=blend&amp;utm_medium=website&amp;utm_campaign=other-work">
+        <img src="icons/dictate.svg" alt="" width="52" height="52">
+        <div><h3>Dictate</h3>
+        <p>Dictation and call recording for Mac. It runs on your Mac, and no bot joins the call.</p></div>
+      </a>
     </div>
   </section>
 </main>
 <footer class="site">
-  <h2>My other work</h2>
-  <div class="work">
-    <a class="point" href="https://dembrane.com">
-      <img src="icons/dembrane.png" alt="" width="52" height="52">
-      <div><h3>dembrane</h3>
-      <p>Makes sense of big, messy conversations, so everyone can shape what happens next.</p></div>
-    </a>
-    <a class="point" href="https://spashii.github.io/dictate/?utm_source=blend&amp;utm_medium=website&amp;utm_campaign=other-work">
-      <img src="icons/dictate.svg" alt="" width="52" height="52">
-      <div><h3>Dictate</h3>
-      <p>Dictation and call recording for Mac. It runs on your Mac, and no bot joins the call.</p></div>
-    </a>
-  </div>
-  <p>Made by <a href="https://github.com/spashii">spashii</a>. <a href="https://github.com/spashii/blend">Source on GitHub</a></p>
+  Made by <a href="https://github.com/spashii">Sameer</a>. Open source <span class="nowrap">(MIT)</span>. <a href="https://github.com/spashii/blend">GitHub</a>.
 </footer>
 
 <script>
