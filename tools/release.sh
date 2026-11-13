@@ -158,9 +158,16 @@ if [[ -n $profile ]]; then
   xcrun stapler staple $stage/Blend.app
   rm $out/Blend.zip
 fi
-ln -s /Applications $stage/Applications
 dmg=$out/Blend-$version.dmg
-hdiutil create -quiet -volname "Blend Mic $version" -srcfolder $stage -fs HFS+ -format UDZO -ov $dmg
+# dmgbuild writes the window layout (background, icon positions) into the image's
+# .DS_Store directly, so no Finder or AppleScript runs. It lives in a venv, not globally.
+dmgbuildVenv=${BLEND_DMGBUILD_VENV:-$HOME/.venvs/dmgbuild}
+if [[ ! -x $dmgbuildVenv/bin/dmgbuild ]]; then
+  python3 -m venv $dmgbuildVenv
+  $dmgbuildVenv/bin/pip install --quiet dmgbuild==1.6.7
+fi
+rm -f $dmg
+$dmgbuildVenv/bin/dmgbuild -s tools/dmg/settings.py -D app=$stage/Blend.app "Blend Mic $version" $dmg
 if [[ $identity != - ]]; then
   codesign --sign "$identity" $signFlags $dmg
 fi

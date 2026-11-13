@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400">
+  <rect width="640" height="400" fill="#ffffff"/>
+  <!-- Icons sit at x=190 and x=450, y=170 (see settings.py). The arrow runs between them. -->
+  <line x1="268" y1="170" x2="364" y2="170" stroke="#86868b" stroke-width="3" stroke-linecap="round" stroke-dasharray="0.1 9"/>
+  <path d="M 362 159 L 378 170 L 362 181" fill="none" stroke="#86868b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="320" y="330" text-anchor="middle" font-family="Inter Variable, Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="17" fill="#1d1d1f">Drag Blend into Applications</text>
+</svg>
