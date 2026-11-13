@@ -12,7 +12,6 @@ format = "UDZO"
 filesystem = "HFS+"
 files = [app]
 symlinks = {"Applications": "/Applications"}
-hide_extensions = ["Blend.app"]
 
 background = os.path.join(here, "background.png")  # background@2x.png is found beside it
 # Finder's window height includes the 28 point title bar; the artwork is 640 x 400.
