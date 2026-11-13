@@ -3,9 +3,10 @@
 # hidden. The icon centres match the arrow ends in background.svg; if either changes,
 # regenerate the PNGs with tools/dmg/render.sh and re-run tools/dmg/preview.py.
 import os
+import sys
 
 app = defines["app"]  # noqa: F821 (dmgbuild injects defines)
-here = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else "."
+here = os.path.dirname(os.path.abspath(sys._getframe().f_code.co_filename))  # dmgbuild exec's this file without __file__; it compiles it under the -s path
 
 format = "UDZO"
 filesystem = "HFS+"
