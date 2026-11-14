@@ -10,6 +10,7 @@
 #import <Foundation/Foundation.h>
 
 #include "BlendEngine.h"
+#include "BlendKit.h"
 
 #include <dlfcn.h>
 #include <libproc.h>
@@ -22,6 +23,7 @@
 #include <climits>
 #include <cmath>
 #include <cstdio>
+#include <mutex>
 #include <set>
 #include <string>
 #include <thread>
@@ -1174,10 +1176,124 @@ void Usage()
     printf("usage: lab devices | mixes | mixes-set JSON | play SECONDS | record UID SECONDS [OUT.wav] |\n"
            "           loop UID SECONDS | stress ITERATIONS [PAUSE_MS] | remove-live | procs |\n"
            "           tap BUNDLE_PREFIX SECONDS [--no-responsible] | record-echo SECONDS OUT.wav |\n"
-           "           access\n");
+           "           capture BUNDLE SECONDS OUT_PREFIX [--no-echo] | access\n");
 }
 
 } // namespace
+
+// lab capture BUNDLE SECONDS OUT_PREFIX [--no-echo]
+// Runs the real CallCapture against the call app BUNDLE for SECONDS, writes OUT_PREFIX.me.wav
+// and OUT_PREFIX.call.wav (mono, 48 kHz) and prints one JSON object: what arrived, whether
+// the positions were continuous, every event with its time and detail, per-second levels of
+// both sides, the longest run of zeros in Call, and the capture's diagnostics.
+struct CaptureResult
+{
+    std::mutex mutex;
+    std::vector<float> me, call;
+    uint64_t expected = 0;
+    bool contiguous = true;
+    std::string events;
+    double start = 0;
+};
+
+static void WriteMono(const std::string& path, const std::vector<float>& samples)
+{
+    if (samples.empty()) {
+        return;
+    }
+    AVAudioFormat* format = [[AVAudioFormat alloc] initStandardFormatWithSampleRate:48000 channels:1];
+    NSError* error = nil;
+    NSDictionary* settings = @{
+        AVFormatIDKey : @(kAudioFormatLinearPCM), AVSampleRateKey : @48000, AVNumberOfChannelsKey : @1,
+        AVLinearPCMBitDepthKey : @32, AVLinearPCMIsFloatKey : @YES, AVLinearPCMIsBigEndianKey : @NO};
+    AVAudioFile* file = [[AVAudioFile alloc] initForWriting:[NSURL fileURLWithPath:@(path.c_str())]
+                                                   settings:settings
+                                               commonFormat:AVAudioPCMFormatFloat32
+                                                interleaved:NO
+                                                      error:&error];
+    AVAudioPCMBuffer* buffer = [[AVAudioPCMBuffer alloc] initWithPCMFormat:format
+                                                              frameCapacity:AVAudioFrameCount(samples.size())];
+    buffer.frameLength = AVAudioFrameCount(samples.size());
+    std::copy(samples.begin(), samples.end(), buffer.floatChannelData[0]);
+    [file writeFromBuffer:buffer error:&error];
+}
+
+static std::string Seconds(const std::vector<float>& x)
+{
+    std::string out = "[";
+    for (size_t at = 0; at + 48000 <= x.size(); at += 48000) {
+        double sum = 0, peak = 0;
+        for (size_t i = at; i < at + 48000; i++) {
+            sum += double(x[i]) * x[i];
+            peak = std::max(peak, double(std::fabs(x[i])));
+        }
+        char buf[96];
+        snprintf(buf, sizeof(buf), "%s{\"rmsDb\":%.1f,\"peakDb\":%.1f}", at ? "," : "",
+            20 * std::log10(std::sqrt(sum / 48000) + 1e-9), 20 * std::log10(peak + 1e-9));
+        out += buf;
+    }
+    return out + "]";
+}
+
+static int CmdCapture(const std::string& bundle, double seconds, const std::string& prefix, bool echo)
+{
+    if (!RequestMicrophone()) {
+        printf("{\"error\":\"no microphone permission\"}\n");
+        return 1;
+    }
+    CaptureResult result;
+    result.start = Now();
+    BKCallCaptureOptions options = {};
+    options.label = "Lab";
+    options.echo = echo ? BKEchoCancellationOn : BKEchoCancellationOff;
+    options.callBundleID = bundle.c_str();
+    options.outputRate = 48000;
+    BKCallCapture* capture = BKCallCaptureCreate(&options,
+        [](void* context, const float* me, const float* call, uint32_t frames, uint64_t position) {
+            auto r = static_cast<CaptureResult*>(context);
+            std::lock_guard lock(r->mutex);
+            if (position != r->expected) {
+                r->contiguous = false;
+            }
+            r->expected = position + frames;
+            r->me.insert(r->me.end(), me, me + frames);
+            r->call.insert(r->call.end(), call, call + frames);
+        },
+        [](void* context, BKEventKind kind, const char* detail) {
+            auto r = static_cast<CaptureResult*>(context);
+            std::lock_guard lock(r->mutex);
+            char buf[512];
+            snprintf(buf, sizeof(buf), "%s{\"t\":%.2f,\"kind\":%d,\"detail\":\"%s\"}",
+                r->events.empty() ? "" : ",", Now() - r->start, int(kind), detail ? detail : "");
+            r->events += buf;
+        },
+        &result);
+    const BKStartResult started = BKCallCaptureStart(capture);
+    if (started != BKStartStarted) {
+        printf("{\"error\":\"start failed\",\"result\":%d}\n", int(started));
+        BKCallCaptureDestroy(capture);
+        return 1;
+    }
+    Sleep(seconds);
+    char* text = BKCallCaptureDiagnostics(capture);
+    std::string diagnostics = text ? text : "";
+    free(text);
+    BKCallCaptureStop(capture);
+    BKCallCaptureDestroy(capture);
+    std::lock_guard lock(result.mutex);
+    size_t longest = 0, run = 0;
+    for (float v : result.call) {
+        run = v == 0 ? run + 1 : 0;
+        longest = std::max(longest, run);
+    }
+    WriteMono(prefix + ".me.wav", result.me);
+    WriteMono(prefix + ".call.wav", result.call);
+    printf("{\"frames\":%zu,\"contiguous\":%s,\"callLongestZeroRunMs\":%.0f,\"events\":[%s],"
+           "\"diagnostics\":\"%s\",\"me\":%s,\"call\":%s}\n",
+        result.me.size(), result.contiguous ? "true" : "false", longest / 48.0, result.events.c_str(),
+        diagnostics.c_str(), Seconds(result.me).c_str(), Seconds(result.call).c_str());
+    return 0;
+}
 
 int main(int argc, const char* argv[])
 {
@@ -1238,6 +1354,9 @@ int main(int argc, const char* argv[])
         }
         if (cmd == "engine" && argc > 2) {
             return CmdEngine(arg(2), std::stod(arg(3, "10")), arg(4));
+        }
+        if (cmd == "capture" && argc > 4) {
+            return CmdCapture(arg(2), std::stod(arg(3)), arg(4), arg(5) != "--no-echo");
         }
         if (cmd == "access") {
             return RequestMicrophone() ? 0 : 1;

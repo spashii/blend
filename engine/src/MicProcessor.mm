@@ -245,7 +245,7 @@ void MicProcessor::ProcessBlock()
         for (uint32_t i = 0; i < block_; i++) {
             const float x = block[i];
             const float need = std::fabs(x) > BK_LIMIT_THRESHOLD ? BK_LIMIT_THRESHOLD / std::fabs(x) : 1.0f;
-            limiterGain_ = need < limiterGain_ ? need : std::min(1.0f, limiterGain_ + release);
+            limiterGain_ = std::min(need, limiterGain_ + release);
             acted |= limiterGain_ < 1.0f;
             limited_buffer_[i] = x * limiterGain_;
         }

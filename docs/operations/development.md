@@ -32,12 +32,14 @@ xcodebuild test -project app/Blend.xcodeproj -scheme BlendTests -destination "pl
 - `engine/tests/DspTests.cpp`: the ring buffer, resampler quality, drift control, and recovery from backlog and stalls.
 - `engine/tests/IdentityTests.cpp`: the rule that tells app copies apart, against recorded inventories in `spikes/identity/data/`.
 - `engine/tests/CaptureTests.mm`: which channels of a source's buffers become its left and right, where an app tap's channels sit beside a headset's own inputs, and which are an echo-cancelled microphone and its reference, on synthetic buffer lists. It opens no device.
-- `engine/tests/ProcessingTests.mm`: echo cancellation and voice isolation on synthetic signals, through the calls the capture thread makes, and that the far end reaches the sink unchanged and pass-through leaves the microphone alone.
+- `engine/tests/ProcessingTests.mm`: the raw built-in array's channel average, makeup gain, ramp and limiter, echo cancellation and voice isolation on synthetic signals, through the calls the capture thread makes, and that the far end reaches the sink unchanged and pass-through leaves the microphone alone.
 - `engine/tests/KitTests.mm`: BlendKit's call capture against a fake device with its own IO thread: conversion to the fixed output rate by content, gaps and dropped frames, the silence detector, the microphone-plus-tap layout, stop and destroy beside a running IO thread, the tap lost and restored, microphone changes, rate changes and echo removal. It opens no device unless `BLENDKIT_LIVE=1`, which also runs the real default microphone for two seconds.
 - `engine/tests/TimerTests.mm`: the sweep timer ticks only between start and stop, and an engine with nothing to mix runs none. It never configures the engine, so it leaves the driver alone.
 - `app/BlendTests`: when Blend counts as idle, so an update can install without cutting anyone's sound, and the wait for it; when the app reads the engine's status, counted across opening the panel, a check, and a mix coming into and out of use; and the panel's Check for Updates, Report an Issue and View on GitHub items, with the issue link, which carries only the app and macOS versions; and the microphone lists, against a recorded device list: Blend's own devices left out, aggregates made in Audio MIDI Setup kept, and echo cancellation starting on only for physical microphones; and what Uninstall removes once Blend has quit: only files named for Blend, and only after the app exits. They build without the engine and never open Blend.
 
 The pure C++ parts (the ring, the resampler, the source reader and the identity rule) also build and run on Linux.
+
+`spikes/micsim` builds MicSim.app (`spikes/micsim/build.sh`), which stands in for a call app that holds the microphone (`hold PROFILE`: Apple voice processing like FaceTime and WhatsApp, a plain AUHAL input like Chrome, a fixed-channel HAL IOProc like Teams), plays a sound as a person would (`play`), and measures (`watch`, `record`, `analyze`). Dictate's `tools/mic-tests.sh` drives it together with `lab capture`.
 
 `spikes/lab` builds Blend Lab, a command line tool for driver and capture tests that runs as an app so macOS attributes permissions to it. Run it through `spikes/lab/lab.sh`:
 
@@ -45,6 +47,7 @@ The pure C++ parts (the ring, the resampler, the source reader and the identity 
 - `record UID SECONDS [OUT.wav]`: record a device and report gaps.
 - `loop`, `stress ITERATIONS [PAUSE_MS]`, `remove-live`: driver lifecycle tests.
 - `engine CONFIG SECONDS [OUT.wav]`: run the engine with a configuration file and record the mix.
+- `capture BUNDLE SECONDS OUT_PREFIX [--no-echo]`: run the real call capture against a call app and write Me and Call as WAVs, with the events, per-second levels and diagnostics as JSON.
 
 The other folders in `spikes/` hold the measurement scripts behind [the measurements](../internals/measurements.md).
 

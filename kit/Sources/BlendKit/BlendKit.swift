@@ -57,6 +57,14 @@ public struct MicrophoneState: Sendable, Equatable {
     /// Bundle IDs of the other processes that are running input.
     public var holders: [String]
 
+    public init(builtIn: Bool, channels: Int, layoutTag: UInt32, rawArray: Bool, holders: [String]) {
+        self.builtIn = builtIn
+        self.channels = channels
+        self.layoutTag = layoutTag
+        self.rawArray = rawArray
+        self.holders = holders
+    }
+
     /// The device with this UID, or the default input when nil. Nil when there is none.
     public static func read(uid: String? = nil) -> MicrophoneState? {
         var state = BKMicState()
