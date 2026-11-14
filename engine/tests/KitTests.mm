@@ -132,13 +132,16 @@ struct Stream
         sizes.push_back(n);
     }
 
-    void Event(CallEvent event, const std::string&)
+    std::vector<std::string> details;
+
+    void Event(CallEvent event, const std::string& detail)
     {
         static const char* names[] = {"microphoneRestarted", "microphoneLost", "callTapLost",
             "callTapRestored", "callSilent", "callHeard", "echoCancellationFailed", "overflow",
-            "audioServiceRestarted"};
+            "audioServiceRestarted", "microphoneModeChanged"};
         std::lock_guard lock(mutex);
         events.push_back(names[int(event)]);
+        details.push_back(detail);
     }
 
     // Every chunk starts where the one before it ended.
@@ -456,6 +459,9 @@ struct World
     std::function<void(SystemChange)> notify;
     // What a device's own rate listener would call.
     std::function<void()> rateChanged;
+    // What the device's stream-configuration listener would call, and the mode it would see.
+    std::function<void()> modeChanged;
+    std::atomic<bool> rawArray{false};
     dispatch_queue_t queue = nullptr;
 
     void Trigger(SystemChange change)
@@ -529,6 +535,7 @@ public:
             std::lock_guard lock(world_.mutex);
             world_.startedMics.push_back(request_.microphoneUID);
             world_.rateChanged = request_.rateChanged;
+            world_.modeChanged = request_.modeChanged;
             world_.rateQueue = request_.queue;
         }
         running_ = true;
@@ -558,6 +565,10 @@ public:
     }
 
     bool NeedsRestart() const override { return running_ && world_.rate != rate_; }
+    Mode CurrentMode() const override
+    {
+        return world_.rawArray ? Mode{true, "raw-array channels=3 holders=net.example.Call"} : Mode{};
+    }
 
 private:
     static void Emit(void* context, const float* me, const float* farEnd, uint32_t frames)
@@ -1139,6 +1150,61 @@ void EchoTests()
     });
 }
 
+// Another app starting or stopping Apple voice processing changes the microphone's channel
+// count under the running IO. The capture follows its buffers: it reports the change and
+// rebuilds nothing.
+void ModeTests()
+{
+    World world;
+    Stream stream;
+    auto capture = MakeCapture(world, stream);
+    if (capture->Start() != CallStart::Started) {
+        Check(false, "mode test starts");
+        return;
+    }
+    Sleep(50);
+    auto flip = [&](bool raw) {
+        world.rawArray = raw;
+        std::function<void()> call;
+        {
+            std::lock_guard lock(world.mutex);
+            call = world.modeChanged;
+        }
+        Check(bool(call), "the backend was given a mode listener");
+        if (call) {
+            dispatch_queue_t q;
+            {
+                std::lock_guard lock(world.mutex);
+                q = world.rateQueue;
+            }
+            dispatch_async(q, ^{ call(); });
+        }
+        Sleep(150);
+    };
+    flip(true);
+    flip(true);
+    flip(false);
+    {
+        std::lock_guard lock(stream.mutex);
+        int changes = 0;
+        for (size_t i = 0; i < stream.events.size(); i++) {
+            changes += stream.events[i] == "microphoneModeChanged";
+        }
+        Check(changes == 2, "one event per change, none for a repeat", changes);
+        size_t first = 0;
+        while (first < stream.events.size() && stream.events[first] != "microphoneModeChanged") {
+            first++;
+        }
+        Check(first < stream.details.size() &&
+                  stream.details[first].rfind("raw-array channels=3 holders=net.example.Call", 0) == 0,
+            "the event names the mode and the holder");
+    }
+    Check(stream.EventIndex("microphoneRestarted") < 0, "a mode change is not a restarted microphone");
+    Check(capture->Diagnostics().find("restarts=0") != std::string::npos, "and nothing was rebuilt");
+    Check(stream.Contiguous(), "positions stay continuous across the change");
+    capture->Stop();
+}
+
 // Headphones: the call plays where the microphone cannot hear it. Echo cancellation must
 // leave the speaker alone, and the far end still arrives as Call.
 void HeadphoneTests()
@@ -1296,6 +1362,7 @@ int main()
     RecoveryTests();
     EchoTests();
     HeadphoneTests();
+    ModeTests();
     if (const char* live = std::getenv("BLENDKIT_LIVE"); live && std::strcmp(live, "1") == 0) {
         LiveTests();
     }

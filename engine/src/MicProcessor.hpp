@@ -10,6 +10,8 @@
 // block to its sink, together with the far end it was cancelled against, so a host can
 // use the two as one sample-aligned pair.
 
+#include "Routing.hpp"
+
 #include <AudioToolbox/AudioToolbox.h>
 
 #include <atomic>
@@ -58,6 +60,20 @@ public:
     void Process(const float* mic, uint32_t micStride, const float* refLeft,
         uint32_t refLeftStride, const float* refRight, uint32_t refRightStride, uint32_t frames);
 
+    // Control thread, before the first block: the gain a built-in array gets while macOS
+    // delivers it raw, as a linear factor. 1 turns the makeup off; the averaging stays.
+    void SetArrayMakeup(float linear);
+
+    // Capture thread. Like Process, with the microphone as the average of `count` channels
+    // times a gain that ramps (BK_ARRAY_RAMP_MS) toward the makeup when `raw` and toward 1
+    // otherwise. While the gain is above 1 a limiter guards the block that goes to the sink.
+    void ProcessArray(const routing::Channel* mics, uint32_t count, bool raw, const float* refLeft,
+        uint32_t refLeftStride, const float* refRight, uint32_t refRightStride, uint32_t frames);
+
+    // Any thread: the gain now applied, in dB, and the blocks the limiter acted on.
+    float CurrentGainDb() const;
+    uint64_t LimiterActivations() const { return limited_.load(std::memory_order_relaxed); }
+
     // Any thread: what the stages are doing, for diagnostics.
     std::string Describe() const;
 
@@ -88,6 +104,14 @@ private:
     bool hasReference_ = false;
     Float64 isolationTime_ = 0;
     const float* isolationInput_ = nullptr;
+
+    // Capture thread only: the array gain, its slope per sample, and the limiter's state.
+    float makeup_ = 1.0f;
+    float gain_ = 1.0f;
+    float limiterGain_ = 1.0f;
+    std::vector<float> limited_buffer_;
+    std::atomic<float> gainView_{1.0f};
+    std::atomic<uint64_t> limited_{0};
 
     // Set on the capture thread when a stage fails, so it is skipped from then on rather
     // than turning the microphone silent.

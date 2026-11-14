@@ -408,10 +408,53 @@ void MicRoutingTests()
     }
 }
 
+// The microphone's channels are whatever precedes the tap in this cycle's buffers.
+void MicAllTests()
+{
+    using namespace blend::routing;
+    {
+        Buffers b({1, 2}, 16);
+        auto mix = MicAll(b.list, 2, true);
+        Check(mix.mic.first == 0 && mix.mic.count == 1 && !mix.mismatch, "1 microphone channel and a stereo tap");
+        Check(mix.left[0] == Sample(1, 0) && mix.right[0] == Sample(2, 0), "the tap follows it");
+    }
+    {
+        Buffers b({3, 2}, 16);
+        auto mix = MicAll(b.list, 2, true);
+        Check(mix.mic.count == 3 && !mix.mismatch, "a raw array's 3 channels and a stereo tap");
+        Check(mix.left[0] == Sample(3, 0) && mix.right[0] == Sample(4, 0), "the tap is still the last two");
+    }
+    {
+        Buffers b({3}, 16);
+        auto mix = MicAll(b.list, 0, false);
+        Check(mix.mic.count == 3 && !mix.left && !mix.right, "3 channels and no tap are all microphone");
+    }
+    {
+        Buffers b({1, 2}, 16);
+        Check(MicAll(b.list, 2, true).mic.count == 1, "the stream before the flip");
+        Buffers raw({3, 2}, 16);
+        Check(MicAll(raw.list, 2, true).mic.count == 3, "the stream after it");
+        Check(MicAll(b.list, 2, true).mic.count == 1, "and back");
+    }
+    {
+        Buffers b({2}, 16);
+        auto mix = MicAll(b.list, 2, true);
+        Check(mix.mismatch && !mix.left && mix.mic.count == 1, "too few channels is a mismatch with no reference");
+    }
+    {
+        ChannelWatch watch;
+        Check(!watch.Stale(3, 3, 0), "matching channels are not stale");
+        Check(!watch.Stale(1, 3, 1.0) && !watch.Stale(1, 3, 2.0), "a flip in progress is not stale");
+        Check(watch.Stale(1, 3, 3.0), "a layout that outlasts the grace is stale");
+        Check(!watch.Stale(3, 3, 3.5), "and clears once the cycles follow");
+    }
+}
+
 } // namespace
 
 int main()
 {
+    MicAllTests();
     ProduceTests();
     TapTests();
     MicRoutingTests();

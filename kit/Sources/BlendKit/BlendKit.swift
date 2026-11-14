@@ -44,3 +44,35 @@ public struct ThirdPartyComponent: Sendable, Hashable {
     public let license: String
     public let url: String
 }
+
+/// What the engine sees of an input device: the one definition of "raw array" that BlendKit
+/// and its hosts share. Raw means a built-in array of more than one channel with a discrete
+/// or missing layout on Apple silicon, which is what macOS delivers while another app holds
+/// the array with Apple voice processing.
+public struct MicrophoneState: Sendable, Equatable {
+    public var builtIn: Bool
+    public var channels: Int
+    public var layoutTag: UInt32
+    public var rawArray: Bool
+    /// Bundle IDs of the other processes that are running input.
+    public var holders: [String]
+
+    /// The device with this UID, or the default input when nil. Nil when there is none.
+    public static func read(uid: String? = nil) -> MicrophoneState? {
+        var state = BKMicState()
+        let found: Bool = uid.map { $0.withCString { BKMicrophoneState($0, &state) } }
+            ?? BKMicrophoneState(nil, &state)
+        guard found else { return nil }
+        let holders = withUnsafePointer(to: &state.holders) {
+            $0.withMemoryRebound(to: CChar.self, capacity: 256) { String(cString: $0) }
+        }
+        return MicrophoneState(
+            builtIn: state.builtIn, channels: Int(state.channels), layoutTag: state.layoutTag,
+            rawArray: state.rawArray, holders: holders.split(separator: ",").map(String.init))
+    }
+
+    /// The makeup gain in dB the engine applies to a raw array (see BK_ARRAY_MAKEUP_DB).
+    public static let makeupDb = Double(BK_ARRAY_MAKEUP_DB)
+    public static let rampMilliseconds = Double(BK_ARRAY_RAMP_MS)
+    public static let limiterThreshold = Double(BK_LIMIT_THRESHOLD)
+}

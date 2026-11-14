@@ -1,5 +1,7 @@
 #include "MicProcessor.hpp"
 
+#include "BlendKit.h"
+
 #include <modules/audio_processing/include/audio_processing.h>
 
 #include <os/log.h>
@@ -48,6 +50,7 @@ MicProcessor::MicProcessor(double rate, Sink sink, void* context)
     , farEnd_(block_, 0.0f)
     , cleaned_(block_, 0.0f)
     , isolated_(block_, 0.0f)
+    , limited_buffer_(block_, 0.0f)
 {
 }
 
@@ -157,6 +160,42 @@ void MicProcessor::Process(const float* mic, uint32_t micStride, const float* re
     }
 }
 
+void MicProcessor::SetArrayMakeup(float linear)
+{
+    makeup_ = std::max(1.0f, linear);
+}
+
+float MicProcessor::CurrentGainDb() const
+{
+    return 20.0f * std::log10(std::max(gainView_.load(std::memory_order_relaxed), 1e-6f));
+}
+
+void MicProcessor::ProcessArray(const routing::Channel* mics, uint32_t count, bool raw,
+    const float* refLeft, uint32_t refLeftStride, const float* refRight, uint32_t refRightStride,
+    uint32_t frames)
+{
+    const float target = raw ? makeup_ : 1.0f;
+    const float slope = std::max(makeup_ - 1.0f, 0.01f) / std::max(1.0f, float(rate_) * BK_ARRAY_RAMP_MS / 1000.0f);
+    const float inverse = count ? 1.0f / float(count) : 0.0f;
+    for (uint32_t i = 0; i < frames; i++) {
+        float sum = 0;
+        for (uint32_t c = 0; c < count; c++) {
+            sum += mics[c][i];
+        }
+        gain_ += std::clamp(target - gain_, -slope, slope);
+        mic_[filled_] = sum * inverse * gain_;
+        hasReference_ |= refLeft != nullptr;
+        reference_[filled_] = refLeft ? 0.5f * (refLeft[size_t(i) * refLeftStride] +
+                                                   refRight[size_t(i) * refRightStride])
+                                      : 0.0f;
+        if (++filled_ == block_) {
+            ProcessBlock();
+            filled_ = 0;
+        }
+    }
+    gainView_.store(gain_, std::memory_order_relaxed);
+}
+
 void MicProcessor::ProcessBlock()
 {
     const float* block = mic_.data();
@@ -199,6 +238,22 @@ void MicProcessor::ProcessBlock()
         isolationTime_ += block_;
         isolationInput_ = nullptr;
     }
+    if (gain_ > 1.0f + 1e-4f || limiterGain_ < 1.0f) {
+        // Instant attack, linear release: no sample leaves above the threshold.
+        const float release = 1.0f / std::max(1.0f, float(rate_) * BK_LIMIT_RELEASE_MS / 1000.0f);
+        bool acted = false;
+        for (uint32_t i = 0; i < block_; i++) {
+            const float x = block[i];
+            const float need = std::fabs(x) > BK_LIMIT_THRESHOLD ? BK_LIMIT_THRESHOLD / std::fabs(x) : 1.0f;
+            limiterGain_ = need < limiterGain_ ? need : std::min(1.0f, limiterGain_ + release);
+            acted |= limiterGain_ < 1.0f;
+            limited_buffer_[i] = x * limiterGain_;
+        }
+        if (acted) {
+            limited_.fetch_add(1, std::memory_order_relaxed);
+        }
+        block = limited_buffer_.data();
+    }
     sink_(context_, block, hasReference_ ? farEnd_.data() : nullptr, block_);
     hasReference_ = false;
 }
@@ -221,6 +276,9 @@ OSStatus MicProcessor::FeedIsolation(void* context, AudioUnitRenderActionFlags*,
 std::string MicProcessor::Describe() const
 {
     std::ostringstream out;
+    if (makeup_ > 1.0f) {
+        out << " array-gain=" << std::lround(CurrentGainDb()) << "dB limiter=" << LimiterActivations();
+    }
     if (apm_) {
         out << " echo-cancel";
         if (apmFailed_.load()) {

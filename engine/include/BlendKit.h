@@ -44,6 +44,21 @@ typedef enum
     BKStartCallUnavailable = 2,
 } BKStartResult;
 
+// Makeup gain for a built-in microphone array that macOS delivers raw because another app
+// holds it with Apple voice processing. Measured on the MacBook Air (Mac17,3) by the mic-sim
+// calibrate run; a Mac model not in the table in MicCapture.mm uses this value.
+#define BK_ARRAY_MAKEUP_DB 18.0f
+#define BK_ARRAY_RAMP_MS 50
+#define BK_LIMIT_THRESHOLD 0.891f
+#define BK_LIMIT_RELEASE_MS 100
+
+typedef enum
+{
+    // Gain follows the microphone: on while the built-in array arrives raw.
+    BKArrayGainAutomatic = 0,
+    BKArrayGainOff = 1,
+} BKArrayGain;
+
 typedef enum
 {
     BKEventMicrophoneRestarted = 1,
@@ -64,6 +79,10 @@ typedef enum
     // how many.
     BKEventOverflow = 8,
     BKEventAudioServiceRestarted = 9,
+    // The microphone's channel count changed under the running capture because another app
+    // started or stopped Apple voice processing. Not a restart: nothing is rebuilt. detail
+    // is "raw-array channels=3 holders=net.whatsapp.WhatsApp" or "normal".
+    BKEventMicrophoneModeChanged = 10,
 } BKEventKind;
 
 typedef struct
@@ -81,7 +100,26 @@ typedef struct
     // Frames per second of what the callback receives, fixed for the capture's life; 0 is
     // 48000.
     uint32_t outputRate;
+    // BKArrayGainAutomatic or BKArrayGainOff. Zero-initialised structs get Automatic.
+    BKArrayGain arrayGain;
 } BKCallCaptureOptions;
+
+typedef struct
+{
+    bool builtIn;
+    // Input channels the device lists now.
+    uint32_t channels;
+    // The device's preferred channel layout tag for input, 0 when it has none.
+    uint32_t layoutTag;
+    // Apple silicon, built in, more than one channel and a discrete or missing layout.
+    bool rawArray;
+    // Bundle IDs of the other processes running input, comma separated.
+    char holders[256];
+} BKMicState;
+
+// Reads a device's microphone state. `uid` NULL is the default input device. False when
+// there is no such device.
+bool BKMicrophoneState(const char* uid, BKMicState* out);
 
 // Me and Call are mono, at outputRate, for the same instants. `position` counts output
 // frames since BKCallCaptureStart and follows the clock: time with no audio (a restart)

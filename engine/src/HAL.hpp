@@ -4,6 +4,9 @@
 
 #include <CoreAudio/CoreAudio.h>
 
+#include <sys/sysctl.h>
+#include <unistd.h>
+
 #include <string>
 #include <vector>
 
@@ -145,6 +148,67 @@ inline bool IsPhysicalInput(AudioObjectID device)
     default:
         return false;
     }
+}
+
+inline bool IsBuiltIn(AudioObjectID device)
+{
+    UInt32 transport = 0;
+    return Get(device, kAudioDevicePropertyTransportType, transport) &&
+           transport == kAudioDeviceTransportTypeBuiltIn;
+}
+
+inline bool AppleSilicon()
+{
+    int value = 0;
+    size_t size = sizeof(value);
+    return sysctlbyname("hw.optional.arm64", &value, &size, nullptr, 0) == 0 && value == 1;
+}
+
+// The layout tag of an input's preferred channel layout, 0 when it has none.
+inline uint32_t PreferredLayoutTag(AudioObjectID device)
+{
+    auto address = Address(kAudioDevicePropertyPreferredChannelLayout, kAudioObjectPropertyScopeInput);
+    UInt32 size = 0;
+    if (AudioObjectGetPropertyDataSize(device, &address, 0, nullptr, &size) != noErr ||
+        size < sizeof(AudioChannelLayout)) {
+        return 0;
+    }
+    std::vector<uint8_t> storage(size);
+    auto layout = reinterpret_cast<AudioChannelLayout*>(storage.data());
+    if (AudioObjectGetPropertyData(device, &address, 0, nullptr, &size, layout) != noErr) {
+        return 0;
+    }
+    return layout->mChannelLayoutTag;
+}
+
+// A built-in array of more than one channel with a discrete or missing layout, on Apple
+// silicon: what macOS delivers while another app holds the array with voice processing.
+inline bool RawArray(bool builtIn, uint32_t channels, uint32_t layoutTag)
+{
+    const uint32_t discrete = kAudioChannelLayoutTag_DiscreteInOrder & 0xFFFF0000;
+    return AppleSilicon() && builtIn && channels > 1 &&
+           (layoutTag == 0 || (layoutTag & 0xFFFF0000) == discrete);
+}
+
+// Bundle IDs of the other processes that are running input, for the log and the notice.
+inline std::vector<std::string> InputHolders()
+{
+    std::vector<std::string> holders;
+    const pid_t self = getpid();
+    for (AudioObjectID process : GetArray<AudioObjectID>(kAudioObjectSystemObject,
+             kAudioHardwarePropertyProcessObjectList)) {
+        UInt32 input = 0;
+        Get(process, kAudioProcessPropertyIsRunningInput, input);
+        pid_t pid = 0;
+        Get(process, kAudioProcessPropertyPID, pid);
+        if (input && pid != self) {
+            std::string id = GetString(process, kAudioProcessPropertyBundleID);
+            if (!id.empty()) {
+                holders.push_back(id);
+            }
+        }
+    }
+    return holders;
 }
 
 } // namespace blend::hal

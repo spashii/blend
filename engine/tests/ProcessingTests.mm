@@ -6,6 +6,7 @@
 #include "../src/HAL.hpp"
 #include "../src/MicProcessor.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -145,6 +146,97 @@ void PassThroughTests(const std::vector<float>& mic)
 
 } // namespace
 
+// A raw built-in array: three channels averaged, the makeup applied with a ramp, and a
+// limiter after it, in front of the same blocks as always.
+void ArrayTests()
+{
+    const float makeup = std::pow(10.0f, 18.0f / 20.0f);
+    std::vector<float> tone(size_t(2 * kRate));
+    for (size_t i = 0; i < tone.size(); i++) {
+        tone[i] = float(0.01 * std::sin(2 * M_PI * 440 * double(i) / kRate));
+    }
+    auto run = [&](bool raw, const std::vector<float>& a, const std::vector<float>& b,
+                   const std::vector<float>& c, float gain, uint64_t* limited, Output& out) {
+        auto processor = blend::MicProcessor::Create(kRate, false, blend::MicProcessor::Isolation::Off,
+            Collect, &out, true);
+        processor->SetArrayMakeup(gain);
+        for (size_t at = 0; at + kChunk <= a.size(); at += kChunk) {
+            blend::routing::Channel mics[3] = {{&a[at], 1}, {&b[at], 1}, {&c[at], 1}};
+            processor->ProcessArray(mics, 3, raw, nullptr, 1, nullptr, 1, kChunk);
+        }
+        if (limited) {
+            *limited = processor->LimiterActivations();
+        }
+    };
+    std::vector<float> zero(tone.size(), 0.0f);
+    {
+        Output out;
+        run(true, tone, tone, tone, makeup, nullptr, out);
+        const double gain = TailDb(out.samples, 1) - TailDb(tone, 1);
+        Check(std::fabs(gain - 18) < 0.3, "a raw array gets the makeup", gain);
+    }
+    {
+        Output out;
+        run(true, tone, zero, zero, makeup, nullptr, out);
+        const double gain = TailDb(out.samples, 1) - TailDb(tone, 1);
+        Check(std::fabs(gain - (18 - 9.54)) < 0.3, "channels are averaged, not picked", gain);
+    }
+    {
+        Output out;
+        run(false, tone, tone, tone, makeup, nullptr, out);
+        const double gain = TailDb(out.samples, 1) - TailDb(tone, 1);
+        Check(std::fabs(gain) < 0.1, "not raw: gain 1", gain);
+    }
+    {
+        // The gain ramps: no step between samples larger than a 50 ms slope allows.
+        Output out;
+        run(true, tone, tone, tone, makeup, nullptr, out);
+        const float slope = (makeup - 1.0f) / float(kRate * 0.05);
+        float worst = 0;
+        for (size_t i = 1; i < 4000; i++) {
+            const float expectedMax = std::fabs(tone[i] - tone[i - 1]) * makeup + std::fabs(tone[i]) * slope;
+            worst = std::max(worst, std::fabs(out.samples[i] - out.samples[i - 1]) - expectedMax);
+        }
+        Check(worst < 1e-5f, "the gain ramps, it does not step", worst);
+    }
+    {
+        // A knock: peaks above -19 dBFS in the raw signal would clip after 18 dB.
+        std::vector<float> knock = tone;
+        for (size_t i = 24000; i < 24100; i++) {
+            knock[i] = 0.5f * float(std::sin(2 * M_PI * 800 * double(i) / kRate));
+        }
+        Output out;
+        uint64_t limited = 0;
+        run(true, knock, knock, knock, makeup, &limited, out);
+        float peak = 0;
+        for (float v : out.samples) {
+            peak = std::max(peak, std::fabs(v));
+        }
+        Check(peak <= 0.891f + 1e-4f, "the limiter keeps the knock under -1 dBFS", peak);
+        Check(limited > 0, "and counts that it acted", double(limited));
+    }
+    {
+        // Echo cancellation's input: does WebRTC clamp a float input above 1.0? A mic
+        // sample of 3.0 must still reach the sink above the limiter's reach unclipped by APM
+        // when the processor runs without the array path.
+        Output out;
+        auto processor = blend::MicProcessor::Create(kRate, true, blend::MicProcessor::Isolation::Off, Collect, &out);
+        std::vector<float> loud(size_t(kRate), 0.0f);
+        for (size_t i = 0; i < loud.size(); i++) {
+            loud[i] = 3.0f * float(std::sin(2 * M_PI * 440 * double(i) / kRate));
+        }
+        std::vector<float> stereo(loud.size() * 2, 0.0f);
+        for (size_t at = 0; at + kChunk <= loud.size(); at += kChunk) {
+            processor->Process(&loud[at], 1, &stereo[at * 2], 2, &stereo[at * 2 + 1], 2, kChunk);
+        }
+        float peak = 0;
+        for (size_t i = out.samples.size() / 2; i < out.samples.size(); i++) {
+            peak = std::max(peak, std::fabs(out.samples[i]));
+        }
+        std::printf("     APM float input of 3.0 leaves as a peak of %.2f\n", peak);
+    }
+}
+
 int main()
 {
     std::mt19937 random(7);
@@ -226,6 +318,8 @@ int main()
     }
     Check(!blend::hal::IsPhysicalInput(blend::hal::DeviceForUID("no-such-device")),
         "an unknown device is not physical", 0);
+
+    ArrayTests();
 
     std::printf(failures ? "%d FAILED\n" : "all passed\n", failures);
     return failures ? 1 : 0;

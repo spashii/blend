@@ -15,6 +15,13 @@ public enum Isolation: Sendable {
     case highQuality
 }
 
+public enum ArrayGain: Sendable {
+    /// Gain while the built-in array arrives raw, because another app holds it with Apple
+    /// voice processing; none otherwise.
+    case automatic
+    case off
+}
+
 public struct CallCaptureOptions: Sendable {
     /// Names the capture's queues and the tap, which other apps' audio lists show as
     /// "<label>: <bundle id>".
@@ -27,12 +34,16 @@ public struct CallCaptureOptions: Sendable {
     public var call: TapTarget
     /// Frames per second of what the capture delivers, fixed for its life.
     public var outputRate: Int
+    /// Whether a built-in array that macOS delivers raw gets its makeup gain. Off keeps the
+    /// channel averaging and drops only the gain.
+    public var arrayGain: ArrayGain
 
     public init(
         label: String, microphoneUID: String? = nil,
         echoCancellation: EchoCancellation = .automatic, isolation: Isolation = .off,
-        call: TapTarget, outputRate: Int = 48000
+        call: TapTarget, outputRate: Int = 48000, arrayGain: ArrayGain = .automatic
     ) {
+        self.arrayGain = arrayGain
         self.label = label
         self.microphoneUID = microphoneUID
         self.echoCancellation = echoCancellation
@@ -76,6 +87,10 @@ public final class CallCapture: @unchecked Sendable {
         /// The frames closure fell about 4 seconds behind and frames were dropped.
         case overflow
         case audioServiceRestarted
+        /// Another app started (`rawArray` true) or stopped Apple voice processing on the
+        /// built-in microphone. The capture follows it without a restart. `holders` are the
+        /// bundle IDs of the other apps running input.
+        case microphoneModeChanged(rawArray: Bool, holders: [String])
     }
 
     /// `position` counts output frames since `start()`. The buffers are valid only during
@@ -122,7 +137,8 @@ public final class CallCapture: @unchecked Sendable {
                         var c = BKCallCaptureOptions(
                             label: label, microphoneUID: microphone, echo: echo,
                             isolation: isolation, callBundleID: bundleID, callInstance: instance,
-                            outputRate: UInt32(max(0, options.outputRate)))
+                            outputRate: UInt32(max(0, options.outputRate)),
+                            arrayGain: options.arrayGain == .off ? BKArrayGainOff : BKArrayGainAutomatic)
                         return BKCallCaptureCreate(
                             &c, Self.deliverFrames, Self.deliverEvent, retained.toOpaque())
                     }
@@ -188,6 +204,12 @@ extension CallCapture.Event {
         case BKEventEchoCancellationFailed: self = .echoCancellationFailed
         case BKEventOverflow: self = .overflow
         case BKEventAudioServiceRestarted: self = .audioServiceRestarted
+        case BKEventMicrophoneModeChanged:
+            let text = detail ?? "normal"
+            let holders = text.range(of: "holders=").map {
+                text[$0.upperBound...].split(separator: ",").map(String.init)
+            } ?? []
+            self = .microphoneModeChanged(rawArray: text.hasPrefix("raw-array"), holders: holders)
         default: return nil
         }
     }

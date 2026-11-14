@@ -45,6 +45,9 @@ enum class CallEvent
     EchoCancellationFailed,
     Overflow,
     AudioServiceRestarted,
+    // The microphone's channel count changed because another app started or stopped Apple
+    // voice processing. Nothing was rebuilt.
+    MicrophoneModeChanged,
 };
 
 enum class CallStart
@@ -75,6 +78,8 @@ struct CallCaptureOptions
     std::optional<std::string> callInstance;
     // Zero is 48000. Fixed for the life of the capture, whatever the devices do.
     uint32_t outputRate = 0;
+    // Off keeps the averaging of a raw array and drops the makeup gain.
+    bool arrayGainOff = false;
 };
 
 struct CallCaptureTiming
@@ -105,6 +110,14 @@ public:
     virtual void RefreshProcesses() {}
     virtual bool EchoCancelFailed() const { return false; }
     virtual std::string Describe() const { return {}; }
+    // Control queue: the microphone's mode now. `detail` reads "raw-array channels=3
+    // holders=..." or "normal".
+    struct Mode
+    {
+        bool raw = false;
+        std::string detail = "normal";
+    };
+    virtual Mode CurrentMode() const { return {}; }
 };
 
 struct BackendRequest
@@ -116,6 +129,9 @@ struct BackendRequest
     // A backend that can tell calls this on `queue` the moment its device's rate changes.
     dispatch_queue_t queue = nullptr;
     std::function<void()> rateChanged;
+    // Same, when the device's input stream configuration changes.
+    std::function<void()> modeChanged;
+    bool arrayGainOff = false;
 };
 
 // What a change reported by the system was about.
@@ -194,6 +210,7 @@ private:
     void ReleasePipeline();
     void Emit(CallEvent event, std::string detail = {});
     void OnSystemChange(SystemChange change);
+    void OnModeChange();
     void DrainDelivery();
 
     const CallCaptureOptions options_;

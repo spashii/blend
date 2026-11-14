@@ -56,8 +56,22 @@ public:
         if (capture_.ChannelMismatches()) {
             out << " channel-mismatches=" << capture_.ChannelMismatches();
         }
+        out << " live-mic-channels=" << capture_.LiveMicChannels()
+            << " flips=" << capture_.Flips();
         out << capture_.Describe();
         return out.str();
+    }
+    Mode CurrentMode() const override
+    {
+        const auto mode = capture_.CurrentMode();
+        if (!mode.raw) {
+            return {};
+        }
+        std::string holders;
+        for (const auto& id : hal::InputHolders()) {
+            holders += (holders.empty() ? "" : ",") + id;
+        }
+        return {true, "raw-array channels=" + std::to_string(mode.channels) + " holders=" + holders};
     }
 
 private:
@@ -116,6 +130,9 @@ public:
         options.passThrough = true;
         options.queue = request.queue;
         options.onRateChange = request.rateChanged;
+        options.arrayMode = true;
+        options.arrayGainOff = request.arrayGainOff;
+        options.onModeChange = request.modeChanged;
         options.target = TapTarget{options_.callBundleID, options_.callInstance, false};
         options.tapPrefix = options_.label;
         return std::make_unique<CoreAudioBackend>(std::move(options));
@@ -254,6 +271,7 @@ struct CallCapture::State
     bool microphoneLost = false;
     bool echoFailed = false;
     bool settling = false;
+    bool rawArray = false;
     // The tap was rebuilt for the current stretch of silence; one try, since a call app
     // that really is quiet would otherwise bounce the microphone forever.
     bool silenceRebuilt = false;
@@ -400,6 +418,22 @@ void CallCapture::OnSystemChange(SystemChange change)
     });
 }
 
+// Control queue. A channel flip needs no rebuild: the capture follows its buffers. The event
+// is for the host's log and its notices.
+void CallCapture::OnModeChange()
+{
+    State& s = *state_;
+    if (!s.running || !s.backend) {
+        return;
+    }
+    const auto mode = s.backend->CurrentMode();
+    if (mode.raw == s.rawArray) {
+        return;
+    }
+    s.rawArray = mode.raw;
+    Emit(CallEvent::MicrophoneModeChanged, mode.detail);
+}
+
 void CallCapture::Stop()
 {
     __block bool had = false;
@@ -449,7 +483,7 @@ std::string CallCapture::Diagnostics()
                     << " frames=" << s.pipeline->Position()
                     << " dropped=" << s.pipeline->DroppedFrames();
             }
-            out << " restarts=" << s.restarts;
+            out << " restarts=" << s.restarts << " raw-array=" << (s.rawArray ? "on" : "off");
             if (s.backend) {
                 out << s.backend->Describe();
             }
@@ -477,6 +511,12 @@ bool CallCapture::StartBackend(bool callTap)
             OnSystemChange(SystemChange::Devices);
         }
     };
+    request.arrayGainOff = options_.arrayGainOff;
+    request.modeChanged = [this, alive] {
+        if (alive->load()) {
+            OnModeChange();
+        }
+    };
     auto backend = environment_->MakeBackend(request);
     if (!backend) {
         return false;
@@ -486,6 +526,7 @@ bool CallCapture::StartBackend(bool callTap)
         return false;
     }
     s.backend = std::move(backend);
+    s.rawArray = s.backend->CurrentMode().raw;
     s.withTap = callTap;
     s.echoFailed = false;
     s.stalledFor = 0;

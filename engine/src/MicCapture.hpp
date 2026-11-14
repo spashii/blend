@@ -54,6 +54,15 @@ public:
         // so a host need not wait for its next NeedsRestart poll. Not set: not watched.
         dispatch_queue_t queue = nullptr;
         std::function<void()> onRateChange;
+        // Average every microphone channel of each cycle and apply the array makeup while
+        // macOS delivers the built-in array raw. Off keeps the first channel only, which is
+        // what Blend's own mixes read.
+        bool arrayMode = false;
+        // With arrayMode: the averaging stays and the makeup is 1.
+        bool arrayGainOff = false;
+        // Called on `queue` when the device's input stream configuration changes, which is
+        // how another app starting or stopping Apple voice processing shows.
+        std::function<void()> onModeChange;
     };
 
     explicit MicCapture(Options options);
@@ -79,7 +88,22 @@ public:
     bool EchoCancelFailed() const;
     // Any thread: buffers whose channel count was not the microphone's plus the tap's.
     uint64_t ChannelMismatches() const { return mismatches_.load(std::memory_order_relaxed); }
+    // Diagnostic: the channel count when the capture started.
     uint32_t MicChannels() const { return micChannels_; }
+    // The microphone channels the last IO cycle delivered.
+    uint32_t LiveMicChannels() const { return liveMicChannels_.load(std::memory_order_relaxed); }
+    // Times the cycles' microphone channel count changed.
+    uint64_t Flips() const { return flips_.load(std::memory_order_relaxed); }
+    // Control queue: the device's state now. `raw` is whether the built-in array is
+    // delivered raw.
+    struct Mode
+    {
+        bool builtIn = false;
+        bool raw = false;
+        uint32_t channels = 0;
+        uint32_t layoutTag = 0;
+    };
+    Mode CurrentMode() const;
     // The rate the IO device ran at when this capture started.
     double Rate() const { return ioRate_; }
     // What the processing stages are doing, starting with a space, or empty.
@@ -92,6 +116,7 @@ private:
     bool AddReference();
     void WatchRates();
     void UnwatchRates();
+    float MakeupLinear() const;
 
     const Options options_;
     FrameSink* sink_ = nullptr;
@@ -104,6 +129,10 @@ private:
     // Zero when unknown, which routes the way Blend's own echo reference always has.
     UInt32 tapChannels_ = 0;
     std::atomic<uint64_t> mismatches_{0};
+    std::atomic<uint32_t> liveMicChannels_{0};
+    std::atomic<uint64_t> flips_{0};
+    bool arrayCapable_ = false;
+    mutable routing::ChannelWatch watch_;
     std::vector<AudioObjectID> processes_;
     void* description_ = nullptr; // CATapDescription, retained
     AudioDeviceIOProcID proc_ = nullptr;
@@ -112,6 +141,7 @@ private:
     std::unique_ptr<MicProcessor> processor_;
     // Nominal-rate listeners: each device with its retained AudioObjectPropertyListenerBlock.
     std::vector<std::pair<AudioObjectID, void*>> rateListeners_;
+    void* modeListener_ = nullptr;
 };
 
 } // namespace blend

@@ -1,6 +1,7 @@
 #include "BlendKit.h"
 
 #include "CallCapture.hpp"
+#include "HAL.hpp"
 #include "Probes.hpp"
 
 #include <nlohmann/json.hpp>
@@ -41,6 +42,7 @@ BKEventKind Kind(blend::CallEvent event)
     case blend::CallEvent::EchoCancellationFailed: return BKEventEchoCancellationFailed;
     case blend::CallEvent::Overflow: return BKEventOverflow;
     case blend::CallEvent::AudioServiceRestarted: return BKEventAudioServiceRestarted;
+    case blend::CallEvent::MicrophoneModeChanged: return BKEventMicrophoneModeChanged;
     }
     return BKEventOverflow;
 }
@@ -71,6 +73,7 @@ BKCallCapture* BKCallCaptureCreate(const BKCallCaptureOptions* options, BKFrames
         copy.callInstance = options->callInstance;
     }
     copy.outputRate = options->outputRate;
+    copy.arrayGainOff = options->arrayGain == BKArrayGainOff;
     auto result = new BKCallCapture;
     result->capture = std::make_unique<blend::CallCapture>(std::move(copy),
         [=](const float* me, const float* call, uint32_t count, uint64_t position) {
@@ -151,4 +154,31 @@ void BKProbesMute(BKProbes* probes, size_t index, bool muted)
 void BKProbesDestroy(BKProbes* probes)
 {
     delete probes;
+}
+
+bool BKMicrophoneState(const char* uid, BKMicState* out)
+{
+    if (!out) {
+        return false;
+    }
+    *out = {};
+    AudioObjectID device = kAudioObjectUnknown;
+    if (uid && *uid) {
+        device = blend::hal::DeviceForUID(uid);
+    } else {
+        blend::hal::Get(kAudioObjectSystemObject, kAudioHardwarePropertyDefaultInputDevice, device);
+    }
+    if (device == kAudioObjectUnknown) {
+        return false;
+    }
+    out->builtIn = blend::hal::IsBuiltIn(device);
+    out->channels = blend::hal::ChannelCount(device, kAudioObjectPropertyScopeInput);
+    out->layoutTag = blend::hal::PreferredLayoutTag(device);
+    out->rawArray = blend::hal::RawArray(out->builtIn, out->channels, out->layoutTag);
+    std::string holders;
+    for (const auto& id : blend::hal::InputHolders()) {
+        holders += (holders.empty() ? "" : ",") + id;
+    }
+    std::strncpy(out->holders, holders.c_str(), sizeof(out->holders) - 1);
+    return true;
 }

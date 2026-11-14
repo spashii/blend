@@ -164,4 +164,64 @@ inline Microphone MicTap(const AudioBufferList* input, uint32_t micChannels, uin
     return route;
 }
 
+struct MicMix
+{
+    // Every microphone channel of the cycle, counted across buffers from the first.
+    ChannelSpan mic;
+    Channel left;
+    Channel right;
+    // Fewer channels arrived than the tap's plus one microphone channel.
+    bool mismatch = false;
+};
+
+// The microphone's channels are whatever precedes the tap in this cycle's buffers: the total
+// minus the tap's. The count is read per cycle because macOS changes a built-in array's
+// channel count under a running aggregate when another app starts or stops voice
+// processing, and the aggregate lists subdevices before taps. Without a reference every
+// channel is the microphone's.
+inline MicMix MicAll(const AudioBufferList* input, uint32_t tapChannels, bool reference)
+{
+    const uint32_t total = TotalChannels(input);
+    MicMix route;
+    if (!reference || tapChannels == 0) {
+        route.mic = {0, total};
+        return route;
+    }
+    if (total < tapChannels + 1) {
+        route.mic = {0, std::min<uint32_t>(total, 1)};
+        route.mismatch = true;
+        return route;
+    }
+    const uint32_t mics = total - tapChannels;
+    route.mic = {0, mics};
+    route.left = ChannelAt(input, mics);
+    route.right = tapChannels == 1 ? route.left : ChannelAt(input, mics + 1);
+    if (!route.right) {
+        route.right = route.left;
+    }
+    return route;
+}
+
+// Tells a stale layout from a flip in progress: the IO cycles deliver a different number of
+// microphone channels than the device now lists. macOS settles a flip within about a second,
+// so only a difference that outlasts `grace` seconds means the capture is reading buffers
+// from a layout that is gone and is worth rebuilding for.
+struct ChannelWatch
+{
+    double grace = 1.5;
+    double since = -1;
+
+    bool Stale(uint32_t live, uint32_t device, double now)
+    {
+        if (live == 0 || live == device) {
+            since = -1;
+            return false;
+        }
+        if (since < 0) {
+            since = now;
+        }
+        return now - since >= grace;
+    }
+};
+
 } // namespace blend::routing

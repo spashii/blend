@@ -1,5 +1,6 @@
 #include "MicCapture.hpp"
 
+#include "BlendKit.h"
 #include "HAL.hpp"
 #include "Routing.hpp"
 
@@ -8,6 +9,7 @@
 #import <CoreAudio/CATapDescription.h>
 
 #include <algorithm>
+#include <cmath>
 
 #include <unistd.h>
 
@@ -24,7 +26,55 @@ NSArray<NSNumber*>* Numbers(const std::vector<AudioObjectID>& objects)
     return numbers;
 }
 
+// Makeup gain by Mac model prefix, in dB, for the raw built-in array. Each entry is a
+// measurement; a model not listed uses BK_ARRAY_MAKEUP_DB and is logged at start.
+struct ModelGain
+{
+    const char* prefix;
+    float db;
+};
+constexpr ModelGain kModelGains[] = {{"-", BK_ARRAY_MAKEUP_DB}};
+
+std::string HardwareModel()
+{
+    char model[64] = {};
+    size_t size = sizeof(model);
+    sysctlbyname("hw.model", model, &size, nullptr, 0);
+    return model;
+}
+
+float ModelMakeupDb(const std::string& model)
+{
+    for (const auto& entry : kModelGains) {
+        if (model.rfind(entry.prefix, 0) == 0) {
+            return entry.db;
+        }
+    }
+    return BK_ARRAY_MAKEUP_DB;
+}
+
 } // namespace
+
+float MicCapture::MakeupLinear() const
+{
+    if (options_.arrayGainOff) {
+        return 1.0f;
+    }
+    return std::pow(10.0f, ModelMakeupDb(HardwareModel()) / 20.0f);
+}
+
+MicCapture::Mode MicCapture::CurrentMode() const
+{
+    Mode mode;
+    if (device_ == kAudioObjectUnknown) {
+        return mode;
+    }
+    mode.builtIn = hal::IsBuiltIn(device_);
+    mode.channels = hal::ChannelCount(device_, kAudioObjectPropertyScopeInput);
+    mode.layoutTag = hal::PreferredLayoutTag(device_);
+    mode.raw = hal::RawArray(mode.builtIn, mode.channels, mode.layoutTag);
+    return mode;
+}
 
 MicCapture::MicCapture(Options options)
     : options_(std::move(options))
@@ -49,6 +99,30 @@ OSStatus MicCapture::IOProc(AudioObjectID, const AudioTimeStamp*, const AudioBuf
     }
     // The microphone's channels come first, then the tap's two, in subdevice order.
     const bool reference = self->aggregate_ != kAudioObjectUnknown;
+    if (self->options_.arrayMode) {
+        const routing::MicMix mix =
+            routing::MicAll(input, reference ? (self->tapChannels_ ? self->tapChannels_ : 2) : 0, reference);
+        if (mix.mic.count == 0) {
+            return noErr;
+        }
+        if (mix.mismatch) {
+            self->mismatches_.fetch_add(1, std::memory_order_relaxed);
+        }
+        if (self->liveMicChannels_.exchange(mix.mic.count, std::memory_order_relaxed) != mix.mic.count) {
+            self->flips_.fetch_add(1, std::memory_order_relaxed);
+        }
+        constexpr uint32_t kMaxMics = 16;
+        routing::Channel mics[kMaxMics];
+        const uint32_t count = std::min(mix.mic.count, kMaxMics);
+        for (uint32_t c = 0; c < count; c++) {
+            mics[c] = routing::ChannelAt(input, mix.mic.first + c);
+        }
+        // Raw by the channel count of this very cycle, so gain and audio switch together.
+        const bool raw = self->arrayCapable_ && count > 1;
+        self->processor_->ProcessArray(mics, count, raw, mix.left.data, mix.left.stride,
+            mix.right.data, mix.right.stride, routing::Frames(input));
+        return noErr;
+    }
     const routing::Microphone route = reference && self->tapChannels_
         ? routing::MicTap(input, self->micChannels_, self->tapChannels_)
         : routing::Mic(input, self->micChannels_, reference);
@@ -124,6 +198,16 @@ bool MicCapture::AddReference()
 
 void MicCapture::WatchRates()
 {
+    if (options_.queue && options_.onModeChange) {
+        auto address = hal::Address(kAudioDevicePropertyStreamConfiguration,
+            kAudioObjectPropertyScopeInput);
+        auto callback = options_.onModeChange;
+        AudioObjectPropertyListenerBlock block =
+            ^(UInt32, const AudioObjectPropertyAddress*) { callback(); };
+        if (AudioObjectAddPropertyListenerBlock(device_, &address, options_.queue, block) == noErr) {
+            modeListener_ = (__bridge_retained void*)block;
+        }
+    }
     if (!options_.queue || !options_.onRateChange) {
         return;
     }
@@ -147,6 +231,14 @@ void MicCapture::WatchRates()
 
 void MicCapture::UnwatchRates()
 {
+    if (modeListener_) {
+        auto address = hal::Address(kAudioDevicePropertyStreamConfiguration,
+            kAudioObjectPropertyScopeInput);
+        auto block = (__bridge AudioObjectPropertyListenerBlock)modeListener_;
+        AudioObjectRemovePropertyListenerBlock(device_, &address, options_.queue, block);
+        CFBridgingRelease(modeListener_);
+        modeListener_ = nullptr;
+    }
     auto address = hal::Address(kAudioDevicePropertyNominalSampleRate);
     for (auto& [device, retained] : rateListeners_) {
         auto block = (__bridge AudioObjectPropertyListenerBlock)retained;
@@ -194,6 +286,10 @@ bool MicCapture::Start(FrameSink& sink)
         return false;
     }
     mismatches_.store(0, std::memory_order_relaxed);
+    flips_.store(0, std::memory_order_relaxed);
+    liveMicChannels_.store(micChannels_, std::memory_order_relaxed);
+    watch_.since = -1;
+    arrayCapable_ = options_.arrayMode && hal::AppleSilicon() && hal::IsBuiltIn(device_);
     ioRate_ = hal::NominalRate(ioDevice_);
     processor_ = MicProcessor::Create(hal::NominalRate(ioDevice_),
         reference && options_.echoCancel, options_.isolation, Emit, this,
@@ -203,6 +299,9 @@ bool MicCapture::Start(FrameSink& sink)
     uint32_t frames = std::min<uint32_t>(hal::BufferFrames(ioDevice_), 4096);
     if (processor_) {
         frames += processor_->BlockFrames();
+    }
+    if (processor_ && options_.arrayMode) {
+        processor_->SetArrayMakeup(MakeupLinear());
     }
     sink.Prepare(hal::NominalRate(ioDevice_), frames);
     WatchRates();
@@ -220,6 +319,13 @@ bool MicCapture::NeedsRestart() const
         return false;
     }
     if (hal::DeviceForUID(options_.uid) != device_ || hal::NominalRate(device_) != rate_) {
+        return true;
+    }
+    // Safety net, not a trigger: a flip changes the channel count under the running IO and
+    // the cycles follow it. Only cycles that stay on a layout the device has left are stale.
+    if (options_.arrayMode &&
+        watch_.Stale(liveMicChannels_.load(std::memory_order_relaxed),
+            hal::ChannelCount(device_, kAudioObjectPropertyScopeInput), CFAbsoluteTimeGetCurrent())) {
         return true;
     }
     // The aggregate labels what the host receives, so its own rate has to hold still.
