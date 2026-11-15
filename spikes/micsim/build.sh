@@ -29,4 +29,16 @@ if [[ -f $kc ]]; then
 else
   codesign --force --sign - $near
 fi
+# A third, a regular app that only plays: the far end of a call, which the call capture taps.
+# BlendKit taps only regular apps, so this one is not an agent; it never takes the microphone.
+far=$out/MicSimFar.app
+rm -rf $far
+cp -R $app $far
+sed -i '' 's/app.blend.micsim</app.blend.micsimfar</' $far/Contents/Info.plist
+/usr/libexec/PlistBuddy -c 'Delete :LSUIElement' $far/Contents/Info.plist
+if [[ -f $kc ]]; then
+  codesign --force --sign "Blend Dev" --keychain $kc $far
+else
+  codesign --force --sign - $far
+fi
 echo $app

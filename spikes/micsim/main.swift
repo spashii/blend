@@ -8,11 +8,19 @@ import Foundation
 // delivers. It runs as an app (`open -n`) so macOS attributes the microphone permission to it.
 //
 //   MicSim hold <profile> [--seconds N] [--rate R] [--cycle on=3,off=2,count=10] [--play far.wav] [--log path]
+//              [--near near.wav [--near-loop] [--near-delay S] [--near-gain G]] [--delay S] [--tail S]
+//     --near plays a file through a plain output in this process, for a level test across the
+//     hold: a voice processing unit ducks every other process's output by 15 dB or more but
+//     not its own process's, so only a player in the holder keeps its level when the hold
+//     starts. Once, or looped with --near-loop; --near-delay starts it later.
+//     --delay waits before taking the microphone and --tail keeps playing after letting go.
 //   MicSim play <file.wav> [--seconds N] [--gain G] [--log path]
 //   MicSim watch [--seconds N] [--log path]
 //   MicSim record <out.wav> [--seconds N] [--log path]     every channel the built-in microphone delivers
-//   MicSim analyze <file.wav> [--channel N|avg]            level, zero share and third-octave levels as JSON
+//   MicSim analyze <file.wav> [--channel N|avg] [--from S] [--to S]
+//                                                          level, active level, zeros and third-octave levels as JSON
 //   MicSim gen <pink|tone1k> <out.wav> [--seconds N]
+//   MicSim gen shaped <out.wav> --like speech.wav [--seconds N]   noise with speech's long-term spectrum
 //   MicSim profiles
 //
 // Every command writes JSON lines to --log (and stderr), so a runner can read results back.
@@ -107,11 +115,20 @@ func defaultOutput() -> AudioDeviceID {
     AudioObjectGetPropertyData(system, &a, 0, nil, &size, &d)
     return d
 }
+/// The input volume scalar of a device's main element, or of channel 1 when the main has none; -1 when it has neither.
+func inputVolume(_ dev: AudioDeviceID) -> Double {
+    for element in [kAudioObjectPropertyElementMain, 1] {
+        var a = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyVolumeScalar, mScope: kAudioObjectPropertyScopeInput, mElement: element)
+        var v: Float32 = 0; var size = UInt32(4)
+        if AudioObjectGetPropertyData(dev, &a, 0, nil, &size, &v) == noErr { return (Double(v) * 1000).rounded() / 1000 }
+    }
+    return -1
+}
 func state() -> [String: Any] {
     let d = defaultInput()
     return ["ev": "state", "channels": inputChannels(d), "layoutTag": layoutTag(d), "rate": getF64(d, kAudioDevicePropertyNominalSampleRate) ?? 0,
             "holders": holders(), "outTransport": getU32(defaultOutput(), kAudioDevicePropertyTransportType) ?? 0, "transport": getU32(d, kAudioDevicePropertyTransportType) ?? 0,
-            "hog": (getU32(d, kAudioDevicePropertyHogMode).map { Int32(bitPattern: $0) }) ?? -2]
+            "hog": (getU32(d, kAudioDevicePropertyHogMode).map { Int32(bitPattern: $0) }) ?? -2, "inputVolume": inputVolume(d)]
 }
 
 func ensureMic() {
@@ -177,6 +194,8 @@ func analyze(samples: [Float], rate: Double) -> [String: Any] {
     var real = [Float](repeating: 0, count: n / 2), imag = [Float](repeating: 0, count: n / 2)
     var windows = 0
     var at = 0
+    let binHzEarly = rate / Double(n)
+    var frameBands: [Double] = []
     while at + n <= samples.count {
         var frame = [Float](repeating: 0, count: n)
         vDSP_vmul(Array(samples[at..<at + n]), 1, window, 1, &frame, 1, vDSP_Length(n))
@@ -185,7 +204,13 @@ func analyze(samples: [Float], rate: Double) -> [String: Any] {
                 var split = DSPSplitComplex(realp: r.baseAddress!, imagp: i.baseAddress!)
                 p.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: n / 2) { vDSP_ctoz($0, 2, &split, 1, vDSP_Length(n / 2)) }
                 vDSP_fft_zrip(setup, &split, 1, log2n, FFTDirection(kFFTDirection_Forward))
-                for k in 1..<n / 2 { power[k] += Double(r[k] * r[k] + i[k] * i[k]) }
+                var inBand = 0.0
+                for k in 1..<n / 2 {
+                    let p = Double(r[k] * r[k] + i[k] * i[k])
+                    power[k] += p
+                    if Double(k) * binHzEarly >= 300 && Double(k) * binHzEarly < 7000 { inBand += p }
+                }
+                frameBands.append(inBand)
             } }
         }
         windows += 1
@@ -203,7 +228,14 @@ func analyze(samples: [Float], rate: Double) -> [String: Any] {
         let f = pow(2, 1.0 / 6)
         thirds[String(Int(centre))] = (10 * log10(max(band(centre / f, centre * f) * scale, 1e-20)) * 100).rounded() / 100
     }
-    return ["bandDb": (10 * log10(max(band(300, 7000) * scale, 1e-20)) * 100).rounded() / 100, "thirdOctave": thirds]
+    // Active level, as a speech level meter takes it: the band power of frames within 20 dB of
+    // the loudest 5 percent, so pauses and the room between words do not count.
+    let sorted = frameBands.sorted()
+    let reference = sorted.isEmpty ? 0 : sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.95))]
+    let active = frameBands.filter { $0 > reference / 100 }
+    let activePower = active.isEmpty ? 0 : active.reduce(0, +) / Double(active.count)
+    return ["bandDb": (10 * log10(max(band(300, 7000) * scale, 1e-20)) * 100).rounded() / 100, "thirdOctave": thirds,
+            "activeBandDb": (10 * log10(max(activePower * scale, 1e-20)) * 100).rounded() / 100]
 }
 
 func levelStats(_ samples: [Float], rate: Double) -> [String: Any] {
@@ -219,6 +251,77 @@ func levelStats(_ samples: [Float], rate: Double) -> [String: Any] {
         i += step
     }
     return ["seconds": perSecond]
+}
+
+// MARK: shaped noise
+
+/// Stationary noise with the long-term magnitude spectrum of `like`, at its active RMS: a level
+/// stimulus that weighs frequencies the way speech does but does not vary from second to
+/// second, so a level before and after a flip can be compared over a few seconds.
+func shapedNoise(like source: [Float], count: Int) -> [Float] {
+    let n = 4096, half = n / 2, log2n = vDSP_Length(12)
+    guard source.count >= n, let setup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else { return [] }
+    defer { vDSP_destroy_fftsetup(setup) }
+    var window = [Float](repeating: 0, count: n)
+    vDSP_hann_window(&window, vDSP_Length(n), Int32(vDSP_HANN_NORM))
+    var power = [Float](repeating: 0, count: half)
+    var re = [Float](repeating: 0, count: half), im = [Float](repeating: 0, count: half)
+    func forward(_ frame: [Float]) {
+        frame.withUnsafeBufferPointer { p in
+            re.withUnsafeMutableBufferPointer { r in im.withUnsafeMutableBufferPointer { i in
+                var split = DSPSplitComplex(realp: r.baseAddress!, imagp: i.baseAddress!)
+                p.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: half) { vDSP_ctoz($0, 2, &split, 1, vDSP_Length(half)) }
+                vDSP_fft_zrip(setup, &split, 1, log2n, FFTDirection(kFFTDirection_Forward))
+            } }
+        }
+    }
+    // Long-term spectrum over frames that carry speech: within 30 dB of the loudest.
+    var energies: [Float] = []
+    var at = 0
+    while at + n <= source.count {
+        var e: Float = 0; vDSP_svesq(Array(source[at..<at + n]), 1, &e, vDSP_Length(n)); energies.append(e)
+        at += half
+    }
+    let loudest = energies.max() ?? 0
+    var activeSum: Float = 0, activeCount = 0
+    at = 0
+    for e in energies {
+        defer { at += half }
+        guard e > loudest / 1000 else { continue }
+        var frame = [Float](repeating: 0, count: n)
+        vDSP_vmul(Array(source[at..<at + n]), 1, window, 1, &frame, 1, vDSP_Length(n))
+        forward(frame)
+        for k in 1..<half { power[k] += re[k] * re[k] + im[k] * im[k] }
+        activeSum += e; activeCount += n
+    }
+    let magnitude = power.map { $0.squareRoot() }
+    // Overlap-add of random-phase frames under a Hann window at half overlap, which sums flat.
+    var out = [Float](repeating: 0, count: count + n)
+    var gen = SystemRandomNumberGenerator()
+    at = 0
+    while at < count {
+        for k in 0..<half {
+            let phase = Float.random(in: 0..<(2 * Float.pi), using: &gen)
+            re[k] = k == 0 ? 0 : magnitude[k] * cos(phase)
+            im[k] = k == 0 ? 0 : magnitude[k] * sin(phase)
+        }
+        var frame = [Float](repeating: 0, count: n)
+        re.withUnsafeMutableBufferPointer { r in im.withUnsafeMutableBufferPointer { i in
+            var split = DSPSplitComplex(realp: r.baseAddress!, imagp: i.baseAddress!)
+            vDSP_fft_zrip(setup, &split, 1, log2n, FFTDirection(kFFTDirection_Inverse))
+            frame.withUnsafeMutableBufferPointer { f in
+                f.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: half) { vDSP_ztoc(&split, 1, $0, 2, vDSP_Length(half)) }
+            }
+        } }
+        for i in 0..<n { out[at + i] += frame[i] * window[i] }
+        at += half
+    }
+    out.removeLast(n)
+    let target = activeCount > 0 ? (activeSum / Float(activeCount)).squareRoot() : 0.05
+    var rms: Float = 0; vDSP_rmsqv(out, 1, &rms, vDSP_Length(out.count))
+    var scale = rms > 0 ? target / rms : 0
+    vDSP_vsmul(out, 1, &scale, &out, 1, vDSP_Length(out.count))
+    return out
 }
 
 // MARK: playback
@@ -242,7 +345,7 @@ func playFile(_ path: String, seconds: Double?, gain: Float) {
 }
 
 var playerKeep: [Any] = []
-func startBackgroundPlayer(_ path: String, loop: Bool) {
+func startBackgroundPlayer(_ path: String, loop: Bool, gain: Float = 1) {
     let engine = AVAudioEngine()
     let player = AVAudioPlayerNode()
     engine.attach(player)
@@ -250,11 +353,12 @@ func startBackgroundPlayer(_ path: String, loop: Bool) {
           let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length)) else { return }
     try? file.read(into: buffer)
     engine.connect(player, to: engine.mainMixerNode, format: file.processingFormat)
+    engine.mainMixerNode.outputVolume = gain
     try? engine.start()
     player.scheduleBuffer(buffer, at: nil, options: loop ? .loops : [])
     player.play()
     playerKeep += [engine, player]
-    emit(["ev": "far-end-playing", "path": path, "via": "output-unit"])
+    emit(["ev": "background-playing", "path": path, "via": "output-unit", "loop": loop, "gain": gain])
 }
 
 // MARK: per-second statistics of what a holder reads
@@ -482,10 +586,21 @@ func runHold(_ name: String) {
             if kv[0] == "on" { on = v } else if kv[0] == "off" { off = v } else if kv[0] == "count" { count = Int(v) }
         }
     }
+    if let near = option("--near") {
+        let loop = args.contains("--near-loop"), gain = Float(number("--near-gain", 1))
+        let at = number("--near-delay", 0)
+        if at > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + at) { startBackgroundPlayer(near, loop: loop, gain: gain) }
+        } else {
+            startBackgroundPlayer(near, loop: loop, gain: gain)
+        }
+    }
     if let far = option("--play") {
         if profile.farThroughUnit { farEnd = loadMono(far, rate: rate) } else { startBackgroundPlayer(far, loop: true) }
     }
     emit(["ev": "hold", "profile": name, "stands": profile.stands, "state": state()])
+    let delay = number("--delay", 0)
+    if delay > 0 { RunLoop.main.run(until: Date().addingTimeInterval(delay)) }
     func start() {
         do {
             switch profile.primitive {
@@ -527,6 +642,8 @@ func runHold(_ name: String) {
         }
         stop()
     }
+    let tail = number("--tail", 0)
+    if tail > 0 { emit(["ev": "tail", "state": state()]); RunLoop.main.run(until: Date().addingTimeInterval(tail)) }
     emit(["ev": "done"])
 }
 
@@ -589,7 +706,15 @@ case "analyze":
         for i in 0..<samples.count { samples[i] += buffer.floatChannelData![c][i] }
     }
     if pick == "avg" { let k = Float(available); for i in 0..<samples.count { samples[i] /= k } }
+    let fileRate = file.processingFormat.sampleRate
+    let from = min(samples.count, max(0, Int(number("--from", 0) * fileRate)))
+    let to = min(samples.count, max(from, Int(number("--to", Double(samples.count) / fileRate) * fileRate)))
+    samples = Array(samples[from..<to])
+    var longest = 0, run = 0
+    for v in samples { run = v == 0 ? run + 1 : 0; longest = max(longest, run) }
     var result = analyze(samples: samples, rate: file.processingFormat.sampleRate)
+    result["longestZeroRunMs"] = (Double(longest) / fileRate * 1000).rounded()
+    result["windowSeconds"] = Double(samples.count) / fileRate
     result.merge(levelStats(samples, rate: file.processingFormat.sampleRate)) { a, _ in a }
     result["channels"] = available
     result["rate"] = file.processingFormat.sampleRate
@@ -599,7 +724,10 @@ case "gen":
     guard args.count > 2 else { exit(1) }
     let rate = 48000.0, n = Int(number("--seconds", 10) * rate)
     var x = [Float](repeating: 0, count: n)
-    if args[1] == "tone1k" {
+    if args[1] == "shaped" {
+        guard let like = option("--like") else { exit(1) }
+        x = shapedNoise(like: loadMono(like, rate: rate), count: n)
+    } else if args[1] == "tone1k" {
         for i in 0..<n { x[i] = 0.5 * Float(sin(2 * Double.pi * 1000 * Double(i) / rate)) }
     } else {
         // Pink noise by Paul Kellet's filter.
