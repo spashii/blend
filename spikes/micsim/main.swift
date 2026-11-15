@@ -148,7 +148,11 @@ func loadMono(_ path: String, rate: Double) -> [Float] {
 }
 
 func writeWAV(_ path: String, channels: [[Float]], rate: Double) {
-    let format = AVAudioFormat(standardFormatWithSampleRate: rate, channels: AVAudioChannelCount(channels.count))!
+    // A standard format of more than two channels is nil; the raw array is three.
+    let format = channels.count <= 2
+        ? AVAudioFormat(standardFormatWithSampleRate: rate, channels: AVAudioChannelCount(channels.count))!
+        : AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: rate, interleaved: false,
+                        channelLayout: AVAudioChannelLayout(layoutTag: kAudioChannelLayoutTag_DiscreteInOrder | UInt32(channels.count))!)
     guard let file = try? AVAudioFile(forWriting: URL(fileURLWithPath: path), settings: [
         AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: rate, AVNumberOfChannelsKey: channels.count,
         AVLinearPCMBitDepthKey: 32, AVLinearPCMIsFloatKey: true, AVLinearPCMIsBigEndianKey: false,
