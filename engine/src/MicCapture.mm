@@ -33,7 +33,7 @@ struct ModelGain
     const char* prefix;
     float db;
 };
-constexpr ModelGain kModelGains[] = {{"-", BK_ARRAY_MAKEUP_DB}};
+constexpr ModelGain kModelGains[] = {{"Mac17,3", 14.0f}};
 
 std::string HardwareModel()
 {
@@ -55,12 +55,17 @@ float ModelMakeupDb(const std::string& model)
 
 } // namespace
 
+float ArrayMakeupDb()
+{
+    return ModelMakeupDb(HardwareModel());
+}
+
 float MicCapture::MakeupLinear() const
 {
     if (options_.arrayGainOff) {
         return 1.0f;
     }
-    return std::pow(10.0f, ModelMakeupDb(HardwareModel()) / 20.0f);
+    return std::pow(10.0f, ArrayMakeupDb() / 20.0f);
 }
 
 MicCapture::Mode MicCapture::CurrentMode() const

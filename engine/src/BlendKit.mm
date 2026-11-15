@@ -2,6 +2,7 @@
 
 #include "CallCapture.hpp"
 #include "HAL.hpp"
+#include "MicCapture.hpp"
 #include "Probes.hpp"
 
 #include <nlohmann/json.hpp>
@@ -154,6 +155,11 @@ void BKProbesMute(BKProbes* probes, size_t index, bool muted)
 void BKProbesDestroy(BKProbes* probes)
 {
     delete probes;
+}
+
+float BKArrayMakeupDb(void)
+{
+    return blend::ArrayMakeupDb();
 }
 
 bool BKMicrophoneState(const char* uid, BKMicState* out)

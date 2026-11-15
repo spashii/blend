@@ -61,12 +61,18 @@ public:
         uint32_t refLeftStride, const float* refRight, uint32_t refRightStride, uint32_t frames);
 
     // Control thread, before the first block: the gain a built-in array gets while macOS
-    // delivers it raw, as a linear factor. 1 turns the makeup off; the averaging stays.
+    // delivers it raw, as a linear factor. 1 turns the makeup off.
     void SetArrayMakeup(float linear);
 
-    // Capture thread. Like Process, with the microphone as the average of `count` channels
+    // Capture thread. Like Process, with the microphone as the first of `count` channels
     // times a gain that ramps (BK_ARRAY_RAMP_MS) toward the makeup when `raw` and toward 1
     // otherwise. While the gain is above 1 a limiter guards the block that goes to the sink.
+    //
+    // The first channel, not an average: the raw array's capsules sit far enough apart that
+    // their sum combs, 5 to 9 dB down from 2.5 kHz on the MacBook Air, and a capture that was
+    // already running when the flip came keeps one channel, which is capsule 0. Picking it
+    // keeps both cases at one level and one gain. A multichannel interface keeps its first
+    // channel, as before the raw array was handled.
     void ProcessArray(const routing::Channel* mics, uint32_t count, bool raw, const float* refLeft,
         uint32_t refLeftStride, const float* refRight, uint32_t refRightStride, uint32_t frames);
 

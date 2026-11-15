@@ -25,6 +25,10 @@
 
 namespace blend {
 
+// The makeup gain in dB for this Mac's raw built-in array (BK_ARRAY_MAKEUP_DB unless its model
+// has a measurement of its own).
+float ArrayMakeupDb();
+
 class MicCapture
 {
 public:
@@ -58,7 +62,7 @@ public:
         // macOS delivers the built-in array raw. Off keeps the first channel only, which is
         // what Blend's own mixes read.
         bool arrayMode = false;
-        // With arrayMode: the averaging stays and the makeup is 1.
+        // With arrayMode: capsule 0 is still picked and the makeup is 1.
         bool arrayGainOff = false;
         // Called on `queue` when the device's input stream configuration changes, which is
         // how another app starting or stopping Apple voice processing shows.

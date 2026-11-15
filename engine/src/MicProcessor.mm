@@ -176,14 +176,13 @@ void MicProcessor::ProcessArray(const routing::Channel* mics, uint32_t count, bo
 {
     const float target = raw ? makeup_ : 1.0f;
     const float slope = std::max(makeup_ - 1.0f, 0.01f) / std::max(1.0f, float(rate_) * BK_ARRAY_RAMP_MS / 1000.0f);
-    const float inverse = count ? 1.0f / float(count) : 0.0f;
+    if (count == 0) {
+        return;
+    }
+    const routing::Channel& first = mics[0];
     for (uint32_t i = 0; i < frames; i++) {
-        float sum = 0;
-        for (uint32_t c = 0; c < count; c++) {
-            sum += mics[c][i];
-        }
         gain_ += std::clamp(target - gain_, -slope, slope);
-        mic_[filled_] = sum * inverse * gain_;
+        mic_[filled_] = first[i] * gain_;
         hasReference_ |= refLeft != nullptr;
         reference_[filled_] = refLeft ? 0.5f * (refLeft[size_t(i) * refLeftStride] +
                                                    refRight[size_t(i) * refRightStride])

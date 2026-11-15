@@ -34,8 +34,8 @@ public struct CallCaptureOptions: Sendable {
     public var call: TapTarget
     /// Frames per second of what the capture delivers, fixed for its life.
     public var outputRate: Int
-    /// Whether a built-in array that macOS delivers raw gets its makeup gain. Off keeps the
-    /// channel averaging and drops only the gain.
+    /// Whether a built-in array that macOS delivers raw gets its makeup gain. Off still takes
+    /// capsule 0 and drops only the gain.
     public var arrayGain: ArrayGain
 
     public init(

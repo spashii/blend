@@ -79,8 +79,9 @@ public struct MicrophoneState: Sendable, Equatable {
             rawArray: state.rawArray, holders: holders.split(separator: ",").map(String.init))
     }
 
-    /// The makeup gain in dB the engine applies to a raw array (see BK_ARRAY_MAKEUP_DB).
-    public static let makeupDb = Double(BK_ARRAY_MAKEUP_DB)
+    /// The makeup gain in dB the engine applies to this Mac's raw array: its model's
+    /// measurement, or BK_ARRAY_MAKEUP_DB.
+    public static var makeupDb: Double { Double(BKArrayMakeupDb()) }
     public static let rampMilliseconds = Double(BK_ARRAY_RAMP_MS)
     public static let limiterThreshold = Double(BK_LIMIT_THRESHOLD)
 }

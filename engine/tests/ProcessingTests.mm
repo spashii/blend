@@ -146,7 +146,7 @@ void PassThroughTests(const std::vector<float>& mic)
 
 } // namespace
 
-// A raw built-in array: three channels averaged, the makeup applied with a ramp, and a
+// A raw built-in array: the first of three channels, the makeup applied with a ramp, and a
 // limiter after it, in front of the same blocks as always.
 void ArrayTests()
 {
@@ -179,7 +179,12 @@ void ArrayTests()
         Output out;
         run(true, tone, zero, zero, makeup, nullptr, out);
         const double gain = TailDb(out.samples, 1) - TailDb(tone, 1);
-        Check(std::fabs(gain - (18 - 9.54)) < 0.3, "channels are averaged, not picked", gain);
+        Check(std::fabs(gain - 18) < 0.3, "the first channel is picked, not averaged with the others", gain);
+    }
+    {
+        Output out;
+        run(true, zero, tone, tone, makeup, nullptr, out);
+        Check(TailDb(out.samples, 1) < -100, "the other capsules do not reach the microphone", TailDb(out.samples, 1));
     }
     {
         Output out;

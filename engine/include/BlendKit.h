@@ -45,9 +45,11 @@ typedef enum
 } BKStartResult;
 
 // Makeup gain for a built-in microphone array that macOS delivers raw because another app
-// holds it with Apple voice processing. Measured on the MacBook Air (Mac17,3) by the mic-sim
-// calibrate run; a Mac model not in the table in MicCapture.mm uses this value.
-#define BK_ARRAY_MAKEUP_DB 18.0f
+// holds it with Apple voice processing: how much quieter capsule 0 hears speech than the
+// normal input does, in the 300 Hz to 7 kHz band. Measured on the MacBook Air (Mac17,3), see
+// docs/internals/measurements.md. A model not in the table in MicCapture.mm uses this
+// value, and BKArrayMakeupDb says which applies on this Mac.
+#define BK_ARRAY_MAKEUP_DB 14.0f
 #define BK_ARRAY_RAMP_MS 50
 #define BK_LIMIT_THRESHOLD 0.891f
 #define BK_LIMIT_RELEASE_MS 100
@@ -116,6 +118,10 @@ typedef struct
     // Bundle IDs of the other processes running input, comma separated.
     char holders[256];
 } BKMicState;
+
+// The makeup gain in dB for this Mac's raw built-in array: its model's measurement, or
+// BK_ARRAY_MAKEUP_DB for a model that has none.
+float BKArrayMakeupDb(void);
 
 // Reads a device's microphone state. `uid` NULL is the default input device. False when
 // there is no such device.
