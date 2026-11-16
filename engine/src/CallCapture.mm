@@ -864,6 +864,8 @@ void CallCapture::WatchTap(bool heard, bool playing, double now, double dt)
         if (s.probe) {
             s.probeFailures = 0;
             s.nextProbeTry = 0;
+            // A blind rebuild's long wait does not hold back one the probe can confirm.
+            s.nextDeadRebuild = std::min(s.nextDeadRebuild, now + timing_.deadRetryCeiling);
             return;
         }
         s.probeFailures++;
@@ -898,6 +900,7 @@ void CallCapture::RebuildDeadTap(double now, double ceiling, bool known)
     s.deadTicks = 0;
     s.deadRebuilds++;
     s.lastDeadRebuild = now;
+    s.deadDelay = std::min(s.deadDelay, ceiling);
     if (known && s.rebuiltForDeath && !s.tapDead) {
         s.tapDead = true;
         Emit(CallEvent::CallTapLost, "the call app's audio stopped arriving");
