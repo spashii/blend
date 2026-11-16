@@ -114,6 +114,23 @@ std::vector<int> CopiesOf(const std::string& bundleID)
     return pids;
 }
 
+const std::vector<std::string>& SystemAudioExclusions()
+{
+    static const std::vector<std::string> apps = {"app.blend.Blend"};
+    return apps;
+}
+
+std::vector<int> SystemAudioExcludedOwners()
+{
+    std::vector<int> owners;
+    for (const auto& app : SystemAudioExclusions()) {
+        for (int pid : CopiesOf(app)) {
+            owners.push_back(pid);
+        }
+    }
+    return owners;
+}
+
 std::string AppBundleID(int pid)
 {
     NSRunningApplication* app = RegularApp(pid);

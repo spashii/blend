@@ -20,20 +20,6 @@ namespace blend {
 namespace {
 
 constexpr uint32_t kDefaultRate = 48000;
-// Blend Mic's output carries its mixes, which hold the microphone, so system audio as Call
-// leaves it out, as it leaves out the host.
-const std::vector<std::string> kSystemExclusions = {"app.blend.Blend"};
-
-std::vector<int> ExcludedOwners()
-{
-    std::vector<int> owners;
-    for (const auto& app : kSystemExclusions) {
-        for (int pid : CopiesOf(app)) {
-            owners.push_back(pid);
-        }
-    }
-    return owners;
-}
 // Tags a capture's delivery queue with the capture, so Stop can tell its own callback from
 // another capture's.
 char deliveryKey;
@@ -94,7 +80,7 @@ public:
     {
         hal::Get(kAudioObjectSystemObject, kAudioHardwarePropertyDefaultOutputDevice, output_);
         if (system_) {
-            tap_.SetExcludedOwners(ExcludedOwners());
+            tap_.SetExcludedOwners(SystemAudioExcludedOwners());
         }
         return tap_.Start(*this);
     }
@@ -102,7 +88,7 @@ public:
     void RefreshProcesses() override
     {
         if (system_) {
-            tap_.SetExcludedOwners(ExcludedOwners());
+            tap_.SetExcludedOwners(SystemAudioExcludedOwners());
         }
         tap_.RefreshProcesses();
     }
@@ -196,7 +182,7 @@ public:
         options.onRateChange = request.rateChanged;
         options.target = Target();
         if (options_.callSystemAudio) {
-            options.excludedApps = kSystemExclusions;
+            options.excludedApps = SystemAudioExclusions();
         }
         options.tapPrefix = options_.label;
         return std::make_unique<CoreAudioBackend>(std::move(options));
@@ -271,7 +257,7 @@ public:
 private:
     std::vector<int> Excluded() const
     {
-        return options_.callSystemAudio ? ExcludedOwners() : std::vector<int>{};
+        return options_.callSystemAudio ? SystemAudioExcludedOwners() : std::vector<int>{};
     }
 
     TapTarget Target() const
@@ -374,7 +360,7 @@ struct CallCapture::State
     // How long, and over how many ticks in a row, the probe heard sound that Call did not.
     double deadFor = 0;
     int deadTicks = 0;
-    double heardFor = 0;
+    double lastDeadRebuild = 0;
     // How long Call has been zeros while the app's output runs.
     double zerosFor = 0;
     // A rebuild for a dead tap did not bring it back; reported as CallTapLost.
@@ -468,7 +454,7 @@ CallStart CallCapture::Start()
         s.probeRenewAfter = timing_.probeRenew;
         s.probeFailures = 0;
         s.nextProbeTry = 0;
-        s.deadFor = s.heardFor = s.zerosFor = 0;
+        s.deadFor = s.zerosFor = s.lastDeadRebuild = 0;
         s.deadTicks = 0;
         s.tapDead = s.rebuiltForDeath = false;
         s.nextDeadRebuild = 0;
@@ -726,7 +712,11 @@ void CallCapture::Reconcile(bool force, bool quiet)
         }
     } else if (StartBackend(false)) {
         s.lastTapTry = now;
-        s.tapDelay = s.tapLost ? std::min(s.tapDelay * 2, timing_.retryCeiling) : timing_.retry;
+        // Each try reopens the microphone, so the wait grows; while the app plays, it stays
+        // short enough that the call comes back within seconds.
+        const double ceiling =
+            environment_->CallIsPlaying() ? timing_.deadRetryCeiling : timing_.retryCeiling;
+        s.tapDelay = s.tapLost ? std::min(s.tapDelay * 2, ceiling) : timing_.retry;
         s.silence.Reset();
         s.rebuiltForDeath = false;
         if (!s.tapLost && !s.tapDead) {
@@ -832,14 +822,11 @@ void CallCapture::WatchTap(bool heard, bool playing, double now, double dt)
             Emit(CallEvent::CallTapRestored);
         }
         // A tap that delivers for a moment and dies again keeps its backoff.
-        s.heardFor += dt;
-        if (s.heardFor >= timing_.recoveredAfter) {
+        if (s.rebuiltForDeath && now - s.lastDeadRebuild >= timing_.recoveredAfter) {
             s.rebuiltForDeath = false;
             s.nextDeadRebuild = 0;
             s.deadDelay = timing_.deadRetry;
         }
-    } else {
-        s.heardFor = 0;
     }
     s.zerosFor = !heard && playing ? s.zerosFor + dt : 0;
     const bool needed = s.zerosFor >= timing_.probeAfter;
@@ -853,11 +840,17 @@ void CallCapture::WatchTap(bool heard, bool playing, double now, double dt)
         return;
     }
     s.lastNeeded = now;
-    // A probe that has heard the app is known to work and stays. One that never has may be
-    // dead itself, so it is made again, sooner at first.
-    if (s.probe && !s.probeProven && s.probeQuietFor >= s.probeRenewAfter) {
+    // A probe whose output device is gone is made again at once. One that has never heard
+    // the app may be dead itself, so it is made again, sooner at first; one that has heard
+    // it is made again only after the longest wait, in case it died since.
+    if (s.probe && s.probe->Stale()) {
         s.probe.reset();
-        s.probeRenewAfter = std::min(s.probeRenewAfter * 2, timing_.probeRenewCeiling);
+    } else if (s.probe &&
+               s.probeQuietFor >= (s.probeProven ? timing_.probeRenewCeiling : s.probeRenewAfter)) {
+        s.probe.reset();
+        if (!s.probeProven) {
+            s.probeRenewAfter = std::min(s.probeRenewAfter * 2, timing_.probeRenewCeiling);
+        }
     }
     if (!s.probe) {
         if (now < s.nextProbeTry) {
@@ -876,9 +869,10 @@ void CallCapture::WatchTap(bool heard, bool playing, double now, double dt)
         s.probeFailures++;
         s.nextProbeTry = now + timing_.retry;
         // Without a probe a dead tap cannot be told from a pause. Rather than leave Call dead
-        // for the rest of the call, rebuild blind, as rarely as the backoff allows.
+        // for the rest of the call, rebuild blind, as rarely as the backoff allows, and
+        // without calling it a lost tap, since it may be a pause.
         if (s.probeFailures >= 3 && now >= s.nextDeadRebuild) {
-            RebuildDeadTap(now, timing_.retryCeiling);
+            RebuildDeadTap(now, timing_.retryCeiling, false);
         }
         return;
     }
@@ -894,16 +888,17 @@ void CallCapture::WatchTap(bool heard, bool playing, double now, double dt)
     if (++s.deadTicks < 2 || s.deadFor < timing_.deadAfter || now < s.nextDeadRebuild) {
         return;
     }
-    RebuildDeadTap(now, timing_.deadRetryCeiling);
+    RebuildDeadTap(now, timing_.deadRetryCeiling, true);
 }
 
-void CallCapture::RebuildDeadTap(double now, double ceiling)
+void CallCapture::RebuildDeadTap(double now, double ceiling, bool known)
 {
     State& s = *state_;
     s.deadFor = 0;
     s.deadTicks = 0;
     s.deadRebuilds++;
-    if (s.rebuiltForDeath && !s.tapDead) {
+    s.lastDeadRebuild = now;
+    if (known && s.rebuiltForDeath && !s.tapDead) {
         s.tapDead = true;
         Emit(CallEvent::CallTapLost, "the call app's audio stopped arriving");
     }

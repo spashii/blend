@@ -1,5 +1,6 @@
 #include "Probes.hpp"
 
+#include "Apps.hpp"
 #include "HAL.hpp"
 
 #include <algorithm>
@@ -11,7 +12,24 @@ struct Probes::Probe : FrameSink
 {
     Probe(Target target, const std::string& label)
         : tap(TapTarget{target.bundleID, target.instance, target.system}, label)
+        , system(target.system)
     {
+    }
+
+    // Control queue. System audio leaves out the same apps a call capture of it does.
+    bool Start()
+    {
+        if (system) {
+            tap.SetExcludedOwners(SystemAudioExcludedOwners());
+        }
+        return tap.Start(*this);
+    }
+    void Refresh()
+    {
+        if (system) {
+            tap.SetExcludedOwners(SystemAudioExcludedOwners());
+        }
+        tap.RefreshProcesses();
     }
     ~Probe() { tap.Stop(); }
 
@@ -36,6 +54,7 @@ struct Probes::Probe : FrameSink
     }
 
     ProcessTap tap;
+    const bool system;
     std::atomic<float> level{0};
 };
 
@@ -82,7 +101,7 @@ void Probes::Set(std::vector<Target> targets)
         probes_.clear();
         for (auto& target : wanted) {
             auto probe = std::make_shared<Probe>(target, label_);
-            probe->tap.Start(*probe);
+            probe->Start();
             probes_.push_back(probe);
         }
         // The last reference to an old probe stops its tap, which takes a while; that must
@@ -118,9 +137,9 @@ void Probes::Refresh()
 {
     for (auto& probe : probes_) {
         if (probe->tap.Running()) {
-            probe->tap.RefreshProcesses();
+            probe->Refresh();
         } else {
-            probe->tap.Start(*probe);
+            probe->Start();
         }
     }
 }

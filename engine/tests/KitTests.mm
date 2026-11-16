@@ -738,7 +738,7 @@ CallCaptureTiming FastTiming()
     timing.recoveredAfter = 0.3;
     timing.probeLinger = 0.6;
     timing.probeRenew = 0.1;
-    timing.probeRenewCeiling = 0.4;
+    timing.probeRenewCeiling = 1;
     timing.stallAfter = 0;
     timing.ringSeconds = 4;
     return timing;
@@ -1030,6 +1030,7 @@ void RecoveryTests()
     WithinTime("pauses never rebuild the tap", 30, [] {
         World world;
         Stream stream;
+        world.probeChangesDevices = true;
         auto capture = MakeCapture(world, stream);
         capture->Start();
         // A conversation: the other side talks, then pauses for much longer than it takes
@@ -1055,8 +1056,10 @@ void RecoveryTests()
             Check(std::count(stream.events.begin(), stream.events.end(), "callTapLost") == 0,
                 "and never as a lost tap");
         }
-        Check(world.probes >= 1 && world.probes <= 4,
-            "a probe that has heard the app serves every pause", world.probes);
+        // A few while the first probe proves itself, then one per second of quiet in the long
+        // silence: never one per tick.
+        Check(world.probes >= 1 && world.probes <= 10,
+            "a probe that has heard the app serves the pauses", world.probes);
         Check(world.liveProbes == 0, "no probe outlives the capture", world.liveProbes);
     });
 
@@ -1397,7 +1400,6 @@ void ApiTests()
     {
         BKCallCaptureOptions options = {};
         options.label = "api";
-        options.callBundleID = "com.example.call";
         options.callSystemAudio = true;
         BKCallCapture* capture = BKCallCaptureCreate(&options,
             [](void*, const float*, const float*, uint32_t, uint64_t) {}, nullptr, nullptr);

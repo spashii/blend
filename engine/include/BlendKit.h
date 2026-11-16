@@ -50,14 +50,14 @@ typedef enum
     // The microphone has been missing for 10 seconds. A notice; the capture keeps trying.
     BKEventMicrophoneLost = 2,
     // The call app's audio stopped arriving and a rebuild did not bring it back. Call is
-    // silence, Me continues from the microphone, and the capture keeps retrying, every 2 to
-    // 60 seconds when the tap cannot start and every 1 to 8 seconds when it starts dead.
-    // detail says why.
+    // silence, Me continues from the microphone, and the capture keeps retrying, at most 8
+    // seconds apart while the app plays. detail says why.
     BKEventCallTapLost = 3,
     BKEventCallTapRestored = 4,
     // The call app's output has run for 3 seconds and every Call sample is zero: a pause in
     // the call, or a revoked System Audio Recording permission. The capture checks a dead
     // tap itself, with a second tap of the app, and rebuilds only when that one hears sound.
+    // For system audio it fires whenever any app holds its output open in silence.
     BKEventCallSilent = 5,
     BKEventCallHeard = 6,
     // Echo cancellation stopped working; Me continues unprocessed.
@@ -68,6 +68,7 @@ typedef enum
     BKEventAudioServiceRestarted = 9,
 } BKEventKind;
 
+// Zero-initialise it, `= {}` in C++ or memset, so fields a host does not set are off.
 typedef struct
 {
     // Names the capture's queues and the call app's tap: "<label>: <bundle id>".
@@ -114,7 +115,8 @@ char* BKCallCaptureDiagnostics(BKCallCapture* capture);
 // Meters app copies without capturing them for anything else.
 BKProbes* BKProbesCreate(const char* label);
 // `json` is an array of {"bundleID", "instance"} (instance optional), or {"systemAudio": true}
-// for everything the Mac plays but this process; an empty array stops metering. On a parse failure returns false and writes a message into error.
+// for everything the Mac plays but this process and Blend Mic; an empty array stops
+// metering. On a parse failure returns false and writes a message into error.
 bool BKProbesSet(BKProbes* probes, const char* json, char* error, size_t errorSize);
 // Peak since the previous call for each probed copy, in the order given, 0 to 1. Returns
 // the number written.

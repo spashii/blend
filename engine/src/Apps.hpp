@@ -29,6 +29,12 @@ std::string CopyIdentity(int pid);
 // The pids of the running copies of an app.
 std::vector<int> CopiesOf(const std::string& bundleID);
 
+// The apps a capture of everything the Mac plays leaves out besides its own process: Blend
+// Mic, whose output carries its mixes, which hold the microphone.
+const std::vector<std::string>& SystemAudioExclusions();
+// The running copies of those apps, by pid.
+std::vector<int> SystemAudioExcludedOwners();
+
 // Bundle ID of a regular app process, or empty.
 std::string AppBundleID(int pid);
 

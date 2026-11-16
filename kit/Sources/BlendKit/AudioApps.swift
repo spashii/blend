@@ -57,7 +57,7 @@ public struct TapTarget: Sendable, Hashable {
     public var instance: String?
     /// Everything the Mac plays except this app, and except Blend Mic, whose output carries
     /// its mixes. bundleID and instance are ignored.
-    public var isSystemAudio: Bool
+    public private(set) var isSystemAudio: Bool
 
     public init(bundleID: String, instance: String? = nil) {
         self.bundleID = bundleID

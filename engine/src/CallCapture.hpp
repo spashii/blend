@@ -93,22 +93,22 @@ struct CallCaptureTiming
     double silentAfter = 3;
     // And this long starts the probe that tells a dead tap from a quiet one.
     double probeAfter = 1;
-    // The probe has to hear sound that Call does not for this long before the tap counts as
-    // dead.
-    double deadAfter = 1.5;
+    // The probe has to hear sound that Call does not for this long, over two ticks, before
+    // the tap counts as dead.
+    double deadAfter = 1;
     // A tap found dead is rebuilt, then again after this wait if it is still dead, doubling
     // up to deadRetryCeiling for as long as the call lasts.
     double deadRetry = 1;
     double deadRetryCeiling = 8;
-    // Call heard this long ends a stretch of rebuilds, so the next dead tap starts the
-    // backoff again.
+    // Call heard this long after the last rebuild ends a stretch of rebuilds, so the next
+    // dead tap starts the backoff again.
     double recoveredAfter = 10;
     // The probe stays this long after Call is heard again, so the pauses of one conversation
     // share a probe instead of each making its own.
     double probeLinger = 30;
     // A probe that has never heard the app, quiet for this long while Call is silent, is
     // made again, waiting twice as long each time up to probeRenewCeiling: a tap made at a
-    // bad moment can be dead itself.
+    // bad moment can be dead itself. One that has heard it is made again after the ceiling.
     double probeRenew = 3;
     double probeRenewCeiling = 24;
     // No frames for this long while running restarts the capture; 0 turns it off.
@@ -234,7 +234,7 @@ private:
     void Reconcile(bool force, bool quiet = false);
     void Tick();
     void WatchTap(bool heard, bool playing, double now, double dt);
-    void RebuildDeadTap(double now, double ceiling);
+    void RebuildDeadTap(double now, double ceiling, bool known);
     bool StartBackend(bool callTap);
     void StopBackend();
     void ReleasePipeline();
