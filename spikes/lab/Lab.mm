@@ -1395,11 +1395,15 @@ int CmdTapDead(const std::string& bundle, double seconds, const std::string& mar
         AudioObjectAddPropertyListenerBlock(w.object, &a, queue, w.block);
     }
     for (AudioObjectID process : processes) {
-        auto a = Addr(kAudioProcessPropertyIsRunningOutput);
-        AudioObjectAddPropertyListenerBlock(process, &a, queue, ^(UInt32, const AudioObjectPropertyAddress*) {
+        watched.push_back({process, kAudioProcessPropertyIsRunningOutput,
+            kAudioObjectPropertyScopeGlobal, "app output running"});
+        auto& w = watched.back();
+        w.block = ^(UInt32, const AudioObjectPropertyAddress*) {
             std::lock_guard lock(*noteMutex);
             noteList->push_back("app output running");
-        });
+        };
+        auto a = Addr(w.selector, w.scope);
+        AudioObjectAddPropertyListenerBlock(w.object, &a, queue, w.block);
     }
 
     AudioDeviceIOProcID proc = nullptr;
@@ -1433,6 +1437,9 @@ int CmdTapDead(const std::string& bundle, double seconds, const std::string& mar
         } else if (i == int(seconds * 5 / 6)) {
             OSStatus e = AudioHardwareDestroyProcessTap(tap);
             phase = e == noErr ? "destroyed" : "destroy-failed";
+            if (e == noErr) {
+                tap = kAudioObjectUnknown;
+            }
         }
         Sleep(1);
         const uint64_t cycles = watch.cycles.load();
@@ -1469,10 +1476,48 @@ int CmdTapDead(const std::string& bundle, double seconds, const std::string& mar
         auto a = Addr(w.selector, w.scope);
         AudioObjectRemovePropertyListenerBlock(w.object, &a, queue, w.block);
     }
+    // Listener blocks still queued read the notes, so the queue drains before they go.
+    dispatch_sync(queue, ^{});
     AudioHardwareDestroyAggregateDevice(aggregate);
-    AudioHardwareDestroyProcessTap(tap);
+    if (tap != kAudioObjectUnknown) {
+        AudioHardwareDestroyProcessTap(tap);
+    }
     return 0;
 }
+
+// Destroys this process's taps named `name` under their running aggregates. The capture's IO
+// goes on and Call is zeros while the app plays, as with a tap that died. Up to `limit`.
+struct TapKiller
+{
+    std::string name;
+    int limit = 0;
+    int killed = 0;
+
+    // Returns the taps it destroyed now.
+    int Run()
+    {
+        int now = 0;
+        for (AudioObjectID tap : GetArray<AudioObjectID>(kAudioObjectSystemObject,
+                 kAudioHardwarePropertyTapList)) {
+            if (killed >= limit) {
+                break;
+            }
+            auto a = Addr(kAudioTapPropertyDescription);
+            CFTypeRef ref = nullptr;
+            UInt32 size = sizeof(ref);
+            if (AudioObjectGetPropertyData(tap, &a, 0, nullptr, &size, &ref) != noErr || !ref) {
+                continue;
+            }
+            CATapDescription* desc = (__bridge_transfer CATapDescription*)ref;
+            if (desc.name && name == desc.name.UTF8String &&
+                AudioHardwareDestroyProcessTap(tap) == noErr) {
+                killed++;
+                now++;
+            }
+        }
+        return now;
+    }
+};
 
 struct CallWatch
 {
@@ -1484,8 +1529,11 @@ struct CallWatch
 
 // Records an app through BlendKit's call capture the way Dictate does, with the app muted:
 // OUT.call.f32 holds the peak of each 10 ms block of Call, OUT.log the events and the
-// capture's diagnostics, OUT.capture.json when position 0 was.
-int CmdCallWatch(const std::string& bundle, double seconds, const std::string& out)
+// capture's diagnostics, OUT.capture.json when position 0 was. With `kill=N@T`, the
+// capture's tap is destroyed T seconds in, and so is each tap the capture rebuilds after
+// it, N taps in all.
+int CmdCallWatch(const std::string& bundle, double seconds, const std::string& out, int kills,
+    double killAt)
 {
     if (!RequestMicrophone()) {
         return 1;
@@ -1536,9 +1584,26 @@ int CmdCallWatch(const std::string& bundle, double seconds, const std::string& o
     FILE* meta = fopen((out + ".capture.json").c_str(), "w");
     fprintf(meta, "{\"start_called\": %.6f, \"start_returned\": %.6f}\n", before, after);
     fclose(meta);
+    TapKiller killer{"Blend Lab: " + bundle, kills};
+    std::atomic<bool> watching{true};
+    std::thread killing([&] {
+        while (watching && kills > 0) {
+            if (UptimeSeconds() - before >= killAt) {
+                for (int n = killer.Run(); n > 0; n--) {
+                    fprintf(log, "%.3f killed tap %d of %d\n", UptimeSeconds() - before,
+                        killer.killed, kills);
+                    fflush(log);
+                }
+            }
+            // Fast enough to destroy a rebuilt tap before its first IO cycle, as a tap that
+            // comes up dead never delivers.
+            Sleep(0.002);
+        }
+    });
     for (int i = 1; i <= int(seconds); i++) {
         Sleep(1);
         mute.Update();
+
         if (i % 10 == 0 || i == int(seconds)) {
             char* text = BKCallCaptureDiagnostics(capture);
             fprintf(log, "%.3f diag %s\n", UptimeSeconds() - before, text);
@@ -1549,6 +1614,8 @@ int CmdCallWatch(const std::string& bundle, double seconds, const std::string& o
             free(text);
         }
     }
+    watching = false;
+    killing.join();
     BKCallCaptureStop(capture);
     char* text = BKCallCaptureDiagnostics(capture);
     free(text);
@@ -1567,7 +1634,7 @@ void Usage()
     printf("usage: lab devices | mixes | mixes-set JSON | play SECONDS | record UID SECONDS [OUT.wav] |\n"
            "           loop UID SECONDS | stress ITERATIONS [PAUSE_MS] | remove-live | procs |\n"
            "           tap BUNDLE_PREFIX SECONDS [--no-responsible] | record-echo SECONDS OUT.wav |\n"
-           "           access | tapdead BUNDLE SECONDS [MUTED_FILE] | callwatch BUNDLE SECONDS OUT\n");
+           "           access | tapdead BUNDLE SECONDS [MUTED_FILE] | callwatch BUNDLE SECONDS OUT [kill=N@T]\n");
 }
 
 } // namespace
@@ -1636,7 +1703,12 @@ int main(int argc, const char* argv[])
             return CmdTapDead(arg(2), std::stod(arg(3)), arg(4));
         }
         if (cmd == "callwatch" && argc > 4) {
-            return CmdCallWatch(arg(2), std::stod(arg(3)), arg(4));
+            int kills = 0;
+            double killAt = 0;
+            for (int i = 5; i < argc; i++) {
+                sscanf(argv[i], "kill=%d@%lf", &kills, &killAt);
+            }
+            return CmdCallWatch(arg(2), std::stod(arg(3)), arg(4), kills, killAt);
         }
         if (cmd == "access") {
             if (!RequestMicrophone()) {

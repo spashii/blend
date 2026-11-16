@@ -4,13 +4,16 @@
 # does and `yes` keeps every core busy. score.py then counts the capture's rebuilds and any
 # Call silence that is not in the source.
 #
-# Usage: run.sh BUILD_DIR OUT_PREFIX SECONDS [LOAD]
+# Usage: run.sh BUILD_DIR OUT_PREFIX SECONDS [LOAD] [kill=N@T]
 # LOAD is the number of `yes` processes, all at nice 19; the default is one per core.
+# kill=N@T destroys the capture's tap T seconds in, and each tap it rebuilds after that,
+# N taps in all, as on the call where a rebuild came up dead.
 set -eu
 build=${1:A}
 out=${2:A}
 seconds=$3
 load=${4:-$(sysctl -n hw.ncpu)}
+extra=${5:-}
 here=${0:A:h}
 lab="$build/spikes/lab/BlendLab.app"
 speaker="$build/spikes/lab/BlendLabSpeaker.app"
@@ -28,7 +31,8 @@ if [ ! -f "$speech" ]; then
   say -o "$speech" --data-format=BEF32@48000 -f "$here/speech.txt"
 fi
 
-source "$HOME/work/fairlock.sh"
+# The test Mac's shared bench lock, when it has one: a loaded run spoils anyone's timing.
+[ -f "$HOME/work/fairlock.sh" ] && source "$HOME/work/fairlock.sh"
 
 pids=()
 cleanup() {
@@ -54,11 +58,11 @@ echo "speaker pid $spid"
 pids+=$spid
 
 open -W -n --env LAB_TIMEOUT=$((seconds + 120)) --stdout "$out.stdout" --stderr "$out.stdout" \
-  "$lab" --args callwatch app.blend.lab.speaker $seconds "$out"
+  "$lab" --args callwatch app.blend.lab.speaker $seconds "$out" $extra
 cat "$out.stdout"
 # The speaker quits once its schedule is played and its files are written.
 for i in $(seq 1 100); do
   kill -0 $spid 2>/dev/null || break
   sleep 0.2
 done
-python3 "$here/score.py" "$out"
+/usr/bin/python3 "$here/score.py" "$out"

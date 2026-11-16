@@ -437,6 +437,8 @@ struct World
     std::atomic<int> deafProbes{0};
     std::atomic<int> probes{0};
     std::atomic<int> liveProbes{0};
+    // Making a probe changes the device list, as a private aggregate does on a real Mac.
+    std::atomic<bool> probeChangesDevices{false};
     // When each backend started, in seconds since the epoch of steady_clock.
     std::vector<double> startTimes;
     // The tap can be tapped alone but not beside the microphone.
@@ -695,7 +697,14 @@ public:
         return !world_.tapBlocked;
     }
     bool CallIsPlaying() override { return world_.playing; }
-    std::unique_ptr<CallProbe> MakeProbe() override { return std::make_unique<FakeProbe>(world_); }
+    std::unique_ptr<CallProbe> MakeProbe() override
+    {
+        auto probe = std::make_unique<FakeProbe>(world_);
+        if (world_.probeChangesDevices) {
+            world_.Trigger(SystemChange::Devices);
+        }
+        return probe;
+    }
     std::shared_ptr<void> Observe(dispatch_queue_t queue,
         std::function<void(SystemChange)> changed) override
     {
@@ -722,10 +731,14 @@ CallCaptureTiming FastTiming()
     timing.settle = 0.02;
     timing.microphoneLostAfter = 0.3;
     timing.silentAfter = 0.2;
+    timing.probeAfter = 0.1;
+    timing.deadAfter = 0.03;
     timing.deadRetry = 0.05;
     timing.deadRetryCeiling = 0.4;
+    timing.recoveredAfter = 0.3;
     timing.probeLinger = 0.6;
-    timing.probeRenew = 0.3;
+    timing.probeRenew = 0.1;
+    timing.probeRenewCeiling = 0.4;
     timing.stallAfter = 0;
     timing.ringSeconds = 4;
     return timing;
@@ -1042,9 +1055,8 @@ void RecoveryTests()
             Check(std::count(stream.events.begin(), stream.events.end(), "callTapLost") == 0,
                 "and never as a lost tap");
         }
-        Check(world.probes >= 1 && world.probes <= 20,
-            "probes are made per pause and renewal, not per tick",
-            world.probes);
+        Check(world.probes >= 1 && world.probes <= 4,
+            "a probe that has heard the app serves every pause", world.probes);
         Check(world.liveProbes == 0, "no probe outlives the capture", world.liveProbes);
     });
 
@@ -1054,12 +1066,15 @@ void RecoveryTests()
         world.deadUntil = 1;
         auto capture = MakeCapture(world, stream);
         capture->Start();
-        WaitUntil([&] { return stream.EventIndex("callHeard") >= 0; });
+        WaitUntil([&] { return world.starts >= 2; });
         Sleep(300);
         capture->Stop();
         Check(world.starts == 2, "the dead tap is rebuilt once", world.starts);
-        Check(stream.EventIndex("callHeard") > stream.EventIndex("callSilent"),
-            "Call is heard after the rebuild");
+        {
+            std::lock_guard lock(stream.mutex);
+            Check(Rms(stream.call, stream.call.size() - 4800, 4800) > 0.1,
+                "Call is heard after the rebuild", Rms(stream.call, stream.call.size() - 4800, 4800));
+        }
         Check(stream.EventIndex("microphoneRestarted") < 0,
             "the rebuild is not a microphone restart");
         Check(stream.EventIndex("callTapLost") < 0, "a rebuild that works is not a lost tap");
@@ -1068,16 +1083,16 @@ void RecoveryTests()
     WithinTime("a tap that dies mid-call comes back", 20, [] {
         World world;
         Stream stream;
+        world.probeChangesDevices = true;
         auto capture = MakeCapture(world, stream);
         capture->Start();
         Sleep(300);
         world.tapDies = true;
         WaitUntil([&] { return world.starts >= 2; });
-        WaitUntil([&] { return stream.EventIndex("callHeard") >= 0; });
-        Sleep(200);
+        Sleep(300);
         capture->Stop();
-        Check(world.starts == 2, "a tap that dies is rebuilt", world.starts);
-        Check(stream.EventIndex("callHeard") >= 0, "and Call is heard again");
+        Check(world.starts == 2, "a tap that dies is rebuilt, though its probe changes devices",
+            world.starts);
         Check(stream.Contiguous(), "frames are continuous across the rebuild");
         std::lock_guard lock(stream.mutex);
         Check(Rms(stream.call, stream.call.size() - 4800, 4800) > 0.1,
@@ -1091,6 +1106,7 @@ void RecoveryTests()
         world.deadFrom = 1;
         world.deadUntil = 9;
         auto capture = MakeCapture(world, stream);
+        const auto began = std::chrono::steady_clock::now();
         capture->Start();
         Sleep(300);
         world.tapDies = true;
@@ -1099,18 +1115,21 @@ void RecoveryTests()
         WaitUntil([&] { return stream.EventIndex("callTapRestored") >= 0; });
         Sleep(300);
         capture->Stop();
+        const double elapsed =
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - began).count();
         Check(world.starts == 10, "and stop once it does", world.starts);
         {
             std::lock_guard lock(world.mutex);
-            // Each wait is at least the one before, up to the ceiling: 0.05, 0.1, 0.2, 0.4.
-            bool growing = true;
-            double last = 0;
+            // The waits between rebuilds: 0.05, 0.1, 0.2, then 0.4 s each.
+            bool backoff = world.startTimes.size() == 10;
+            double worst = 0;
             for (size_t i = 2; i < world.startTimes.size(); i++) {
                 const double wait = world.startTimes[i] - world.startTimes[i - 1];
-                growing = growing && wait >= last * 0.8 && wait < 1.0;
-                last = std::max(last, wait);
+                const double expected = std::min(0.05 * std::pow(2.0, double(i - 2)), 0.4);
+                backoff = backoff && wait >= expected * 0.8 && wait < expected + 0.5;
+                worst = std::max(worst, wait / expected);
             }
-            Check(growing && last >= 0.35, "the retries back off to the ceiling", last);
+            Check(backoff, "the retries wait 0.05, 0.1, 0.2, then 0.4 s", worst);
         }
         const int lost = stream.EventIndex("callTapLost");
         const int restored = stream.EventIndex("callTapRestored");
@@ -1119,8 +1138,10 @@ void RecoveryTests()
         Check(stream.EventIndex("microphoneRestarted") < 0, "none of it is a microphone restart");
         Check(stream.Contiguous(), "frames are continuous across every rebuild");
         std::lock_guard lock(stream.mutex);
-        Check(stream.me.size() >= world.pushedFrames, "the stream kept pace with the clock",
-            double(stream.me.size()) - double(world.pushedFrames.load()));
+        // Silence fills the rebuilds, and no more: the stream is as long as the run.
+        const double seconds = double(stream.me.size()) / 48000;
+        Check(stream.me.size() >= world.pushedFrames && seconds <= elapsed + 0.05,
+            "the stream kept pace with the clock, no faster", seconds - elapsed);
         Check(Rms(stream.call, stream.call.size() - 4800, 4800) > 0.1,
             "Call carries the app at the end", Rms(stream.call, stream.call.size() - 4800, 4800));
     });
@@ -1140,7 +1161,7 @@ void RecoveryTests()
         Check(world.starts == 2, "and the new one finds the dead tap", world.starts);
     });
 
-    WithinTime("a quiet app is not rebuilt, whatever its probe hears", 20, [] {
+    WithinTime("an app with its output stopped gets no probe", 20, [] {
         World world;
         Stream stream;
         world.playing = false;

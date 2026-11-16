@@ -85,19 +85,28 @@ struct CallCaptureTiming
     // Retrying the call tap beside a working microphone backs off up to this.
     double retryCeiling = 60;
     double microphoneLostAfter = 10;
-    // Call zeros for this long while the app plays starts the probe that tells a dead tap
-    // from a quiet one.
+    // Call zeros for this long while the app's output runs is reported as CallSilent.
     double silentAfter = 3;
+    // And this long starts the probe that tells a dead tap from a quiet one.
+    double probeAfter = 1;
+    // The probe has to hear sound that Call does not for this long before the tap counts as
+    // dead.
+    double deadAfter = 1.5;
     // A tap found dead is rebuilt, then again after this wait if it is still dead, doubling
     // up to deadRetryCeiling for as long as the call lasts.
     double deadRetry = 1;
     double deadRetryCeiling = 8;
+    // Call heard this long ends a stretch of rebuilds, so the next dead tap starts the
+    // backoff again.
+    double recoveredAfter = 10;
     // The probe stays this long after Call is heard again, so the pauses of one conversation
     // share a probe instead of each making its own.
     double probeLinger = 30;
-    // A probe that hears nothing for this long while Call is silent is made again: a tap
-    // made at a bad moment can be dead itself.
-    double probeRenew = 10;
+    // A probe that has never heard the app, quiet for this long while Call is silent, is
+    // made again, waiting twice as long each time up to probeRenewCeiling: a tap made at a
+    // bad moment can be dead itself.
+    double probeRenew = 3;
+    double probeRenewCeiling = 24;
     // No frames for this long while running restarts the capture; 0 turns it off.
     double stallAfter = 3;
     double ringSeconds = 4;
@@ -142,6 +151,8 @@ public:
     virtual bool TakeHeard() = 0;
     // Control queue: covers the app's processes as they are now.
     virtual void RefreshProcesses() {}
+    // Control queue: true when what the probe was clocked by is gone.
+    virtual bool Stale() { return false; }
 };
 
 // What a change reported by the system was about.
@@ -219,6 +230,7 @@ private:
     void Reconcile(bool force, bool quiet = false);
     void Tick();
     void WatchTap(bool heard, bool playing, double now, double dt);
+    void RebuildDeadTap(double now, double ceiling);
     bool StartBackend(bool callTap);
     void StopBackend();
     void ReleasePipeline();

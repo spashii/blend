@@ -74,9 +74,20 @@ public:
     }
     ~CoreAudioProbe() override { tap_.Stop(); }
 
-    bool Start() { return tap_.Start(*this); }
+    bool Start()
+    {
+        hal::Get(kAudioObjectSystemObject, kAudioHardwarePropertyDefaultOutputDevice, output_);
+        return tap_.Start(*this);
+    }
     bool TakeHeard() override { return heard_.exchange(false, std::memory_order_relaxed); }
     void RefreshProcesses() override { tap_.RefreshProcesses(); }
+    // The tap's aggregate is clocked by the output device it started on.
+    bool Stale() override
+    {
+        AudioObjectID output = kAudioObjectUnknown;
+        hal::Get(kAudioObjectSystemObject, kAudioHardwarePropertyDefaultOutputDevice, output);
+        return output != output_;
+    }
 
     // IO thread.
     void Raw(const AudioBufferList* input, routing::ChannelSpan span) override
@@ -101,6 +112,7 @@ public:
 
 private:
     ProcessTap tap_;
+    AudioObjectID output_ = kAudioObjectUnknown;
     std::atomic<bool> heard_{false};
 };
 
@@ -303,11 +315,19 @@ struct CallCapture::State
     bool settling = false;
     // Tells a dead tap from a quiet call app while Call is silent (see CallProbe).
     std::unique_ptr<CallProbe> probe;
+    // The probe has heard the app, so it works.
+    bool probeProven = false;
     double probeQuietFor = 0;
+    double probeRenewAfter = 0;
+    int probeFailures = 0;
     double lastNeeded = 0;
     double nextProbeTry = 0;
-    // Ticks in a row the probe heard sound that Call did not.
+    // How long, and over how many ticks in a row, the probe heard sound that Call did not.
+    double deadFor = 0;
     int deadTicks = 0;
+    double heardFor = 0;
+    // How long Call has been zeros while the app's output runs.
+    double zerosFor = 0;
     // A rebuild for a dead tap did not bring it back; reported as CallTapLost.
     bool tapDead = false;
     bool rebuiltForDeath = false;
@@ -396,7 +416,10 @@ CallStart CallCapture::Start()
         s.restarts = 0;
         s.silence.Reset();
         s.probe.reset();
+        s.probeRenewAfter = timing_.probeRenew;
+        s.probeFailures = 0;
         s.nextProbeTry = 0;
+        s.deadFor = s.heardFor = s.zerosFor = 0;
         s.deadTicks = 0;
         s.tapDead = s.rebuiltForDeath = false;
         s.nextDeadRebuild = 0;
@@ -448,8 +471,10 @@ void CallCapture::OnSystemChange(SystemChange change)
     }
     if (change == SystemChange::Processes && now.probe) {
         now.probe->RefreshProcesses();
-    } else if (change != SystemChange::Processes) {
-        // Its aggregate is clocked by the output device, which may be another one now.
+    }
+    // Making a probe changes this process's device list, so only a probe whose clock is gone
+    // is replaced, never one that a device change merely followed.
+    if (now.probe && (change == SystemChange::ServiceRestarted || now.probe->Stale())) {
         now.probe.reset();
     }
     if (change == SystemChange::ServiceRestarted) {
@@ -525,6 +550,9 @@ std::string CallCapture::Diagnostics()
             }
             if (s.probe) {
                 out << " probe=on";
+            }
+            if (s.probeFailures) {
+                out << " probe-failures=" << s.probeFailures;
             }
             if (s.backend) {
                 out << s.backend->Describe();
@@ -650,6 +678,7 @@ void CallCapture::Reconcile(bool force, bool quiet)
         s.lastTapTry = now;
         s.tapDelay = s.tapLost ? std::min(s.tapDelay * 2, timing_.retryCeiling) : timing_.retry;
         s.silence.Reset();
+        s.rebuiltForDeath = false;
         if (!s.tapLost && !s.tapDead) {
             std::string reason;
             if (environment_->CanTapCall(reason)) {
@@ -742,19 +771,30 @@ void CallCapture::WatchTap(bool heard, bool playing, double now, double dt)
     const bool probeHeard = s.probe && s.probe->TakeHeard();
     if (probeHeard) {
         s.probeQuietFor = 0;
+        s.probeProven = true;
+        s.probeRenewAfter = timing_.probeRenew;
     }
     if (heard) {
+        s.deadFor = 0;
         s.deadTicks = 0;
-        s.rebuiltForDeath = false;
-        s.nextDeadRebuild = 0;
-        s.deadDelay = timing_.deadRetry;
         if (s.tapDead) {
             s.tapDead = false;
             Emit(CallEvent::CallTapRestored);
         }
+        // A tap that delivers for a moment and dies again keeps its backoff.
+        s.heardFor += dt;
+        if (s.heardFor >= timing_.recoveredAfter) {
+            s.rebuiltForDeath = false;
+            s.nextDeadRebuild = 0;
+            s.deadDelay = timing_.deadRetry;
+        }
+    } else {
+        s.heardFor = 0;
     }
-    const bool needed = !heard && playing && s.silence.Silent();
+    s.zerosFor = !heard && playing ? s.zerosFor + dt : 0;
+    const bool needed = s.zerosFor >= timing_.probeAfter;
     if (!needed) {
+        s.deadFor = 0;
         s.deadTicks = 0;
         s.probeQuietFor = 0;
         if (s.probe && now - s.lastNeeded >= timing_.probeLinger) {
@@ -763,28 +803,54 @@ void CallCapture::WatchTap(bool heard, bool playing, double now, double dt)
         return;
     }
     s.lastNeeded = now;
-    if (s.probe && s.probeQuietFor >= timing_.probeRenew) {
+    // A probe that has heard the app is known to work and stays. One that never has may be
+    // dead itself, so it is made again, sooner at first.
+    if (s.probe && !s.probeProven && s.probeQuietFor >= s.probeRenewAfter) {
         s.probe.reset();
+        s.probeRenewAfter = std::min(s.probeRenewAfter * 2, timing_.probeRenewCeiling);
     }
     if (!s.probe) {
-        if (now >= s.nextProbeTry) {
-            s.probe = environment_->MakeProbe();
-            s.probeQuietFor = 0;
-            s.deadTicks = 0;
-            s.nextProbeTry = s.probe ? 0 : now + timing_.retry;
+        if (now < s.nextProbeTry) {
+            return;
+        }
+        s.probe = environment_->MakeProbe();
+        s.probeQuietFor = 0;
+        s.probeProven = false;
+        s.deadFor = 0;
+        s.deadTicks = 0;
+        if (s.probe) {
+            s.probeFailures = 0;
+            s.nextProbeTry = 0;
+            return;
+        }
+        s.probeFailures++;
+        s.nextProbeTry = now + timing_.retry;
+        // Without a probe a dead tap cannot be told from a pause. Rather than leave Call dead
+        // for the rest of the call, rebuild blind, as rarely as the backoff allows.
+        if (s.probeFailures >= 3 && now >= s.nextDeadRebuild) {
+            RebuildDeadTap(now, timing_.retryCeiling);
         }
         return;
     }
     if (!probeHeard) {
         s.probeQuietFor += dt;
+        s.deadFor = 0;
         s.deadTicks = 0;
         return;
     }
-    // Two ticks in a row, so sound that reaches the probe a moment before the capture is
-    // not taken for a dead tap.
-    if (++s.deadTicks < 2 || now < s.nextDeadRebuild) {
+    // Sound has to reach the probe and not the capture for a while, over more than one
+    // tick, so sound that reaches the probe a moment before the capture is not a dead tap.
+    s.deadFor += dt;
+    if (++s.deadTicks < 2 || s.deadFor < timing_.deadAfter || now < s.nextDeadRebuild) {
         return;
     }
+    RebuildDeadTap(now, timing_.deadRetryCeiling);
+}
+
+void CallCapture::RebuildDeadTap(double now, double ceiling)
+{
+    State& s = *state_;
+    s.deadFor = 0;
     s.deadTicks = 0;
     s.deadRebuilds++;
     if (s.rebuiltForDeath && !s.tapDead) {
@@ -793,7 +859,7 @@ void CallCapture::WatchTap(bool heard, bool playing, double now, double dt)
     }
     s.rebuiltForDeath = true;
     s.nextDeadRebuild = now + s.deadDelay;
-    s.deadDelay = std::min(s.deadDelay * 2, timing_.deadRetryCeiling);
+    s.deadDelay = std::min(s.deadDelay * 2, ceiling);
     Reconcile(true, true);
 }
 
