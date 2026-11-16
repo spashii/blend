@@ -49,13 +49,15 @@ typedef enum
     BKEventMicrophoneRestarted = 1,
     // The microphone has been missing for 10 seconds. A notice; the capture keeps trying.
     BKEventMicrophoneLost = 2,
-    // The call app's audio stopped arriving and could not be rebuilt. Call is silence, Me
-    // continues from the microphone alone, and the capture retries every 2 seconds. detail
-    // says why.
+    // The call app's audio stopped arriving and a rebuild did not bring it back. Call is
+    // silence, Me continues from the microphone, and the capture keeps retrying, every 2 to
+    // 60 seconds when the tap cannot start and every 1 to 8 seconds when it starts dead.
+    // detail says why.
     BKEventCallTapLost = 3,
     BKEventCallTapRestored = 4,
-    // The call app has been producing sound for 3 seconds and every Call sample is zero.
-    // Usually the System Audio Recording permission was revoked.
+    // The call app's output has run for 3 seconds and every Call sample is zero: a pause in
+    // the call, or a revoked System Audio Recording permission. The capture checks a dead
+    // tap itself, with a second tap of the app, and rebuilds only when that one hears sound.
     BKEventCallSilent = 5,
     BKEventCallHeard = 6,
     // Echo cancellation stopped working; Me continues unprocessed.

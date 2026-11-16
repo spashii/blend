@@ -64,6 +64,46 @@ private:
     MicCapture capture_;
 };
 
+// A tap of the call app on its own aggregate, the way Probes meters an app.
+class CoreAudioProbe : public CallProbe, FrameSink
+{
+public:
+    CoreAudioProbe(TapTarget target, const std::string& label)
+        : tap_(std::move(target), label + " probe")
+    {
+    }
+    ~CoreAudioProbe() override { tap_.Stop(); }
+
+    bool Start() { return tap_.Start(*this); }
+    bool TakeHeard() override { return heard_.exchange(false, std::memory_order_relaxed); }
+    void RefreshProcesses() override { tap_.RefreshProcesses(); }
+
+    // IO thread.
+    void Raw(const AudioBufferList* input, routing::ChannelSpan span) override
+    {
+        if (heard_.load(std::memory_order_relaxed)) {
+            return;
+        }
+        for (uint32_t index = span.first; span.count == 0 || index < span.first + span.count;
+             index++) {
+            const routing::Channel channel = routing::ChannelAt(input, index);
+            if (!channel) {
+                break;
+            }
+            for (uint32_t i = 0, n = routing::Frames(input); i < n; i++) {
+                if (channel[i] != 0.0f) {
+                    heard_.store(true, std::memory_order_relaxed);
+                    return;
+                }
+            }
+        }
+    }
+
+private:
+    ProcessTap tap_;
+    std::atomic<bool> heard_{false};
+};
+
 // Removes its listeners when destroyed. The blocks run on the queue they were added with.
 struct Listeners
 {
@@ -154,6 +194,13 @@ public:
             }
         }
         return false;
+    }
+
+    std::unique_ptr<CallProbe> MakeProbe() override
+    {
+        auto probe = std::make_unique<CoreAudioProbe>(
+            TapTarget{options_.callBundleID, options_.callInstance, false}, options_.label);
+        return probe->Start() ? std::move(probe) : nullptr;
     }
 
     std::shared_ptr<void> Observe(dispatch_queue_t queue,
@@ -254,9 +301,19 @@ struct CallCapture::State
     bool microphoneLost = false;
     bool echoFailed = false;
     bool settling = false;
-    // The tap was rebuilt for the current stretch of silence; one try, since a call app
-    // that really is quiet would otherwise bounce the microphone forever.
-    bool silenceRebuilt = false;
+    // Tells a dead tap from a quiet call app while Call is silent (see CallProbe).
+    std::unique_ptr<CallProbe> probe;
+    double probeQuietFor = 0;
+    double lastNeeded = 0;
+    double nextProbeTry = 0;
+    // Ticks in a row the probe heard sound that Call did not.
+    int deadTicks = 0;
+    // A rebuild for a dead tap did not bring it back; reported as CallTapLost.
+    bool tapDead = false;
+    bool rebuiltForDeath = false;
+    double nextDeadRebuild = 0;
+    double deadDelay = 0;
+    uint64_t deadRebuilds = 0;
     std::string microphoneUID;
     double missingSince = -1;
     double lastAttempt = 0;
@@ -338,7 +395,13 @@ CallStart CallCapture::Start()
         s.missingSince = -1;
         s.restarts = 0;
         s.silence.Reset();
-        s.silenceRebuilt = false;
+        s.probe.reset();
+        s.nextProbeTry = 0;
+        s.deadTicks = 0;
+        s.tapDead = s.rebuiltForDeath = false;
+        s.nextDeadRebuild = 0;
+        s.deadDelay = timing_.deadRetry;
+        s.deadRebuilds = 0;
         s.tapDelay = timing_.retry;
         if (!s.microphoneUID.empty() && StartBackend(true)) {
             result = CallStart::Started;
@@ -383,6 +446,12 @@ void CallCapture::OnSystemChange(SystemChange change)
     if (change == SystemChange::Processes && now.backend) {
         now.backend->RefreshProcesses();
     }
+    if (change == SystemChange::Processes && now.probe) {
+        now.probe->RefreshProcesses();
+    } else if (change != SystemChange::Processes) {
+        // Its aggregate is clocked by the output device, which may be another one now.
+        now.probe.reset();
+    }
     if (change == SystemChange::ServiceRestarted) {
         Emit(CallEvent::AudioServiceRestarted);
     }
@@ -409,6 +478,7 @@ void CallCapture::Stop()
         s.running = false;
         s.ticker->Stop();
         s.observation.reset();
+        s.probe.reset();
         StopBackend();
     });
     if (!had) {
@@ -450,6 +520,12 @@ std::string CallCapture::Diagnostics()
                     << " dropped=" << s.pipeline->DroppedFrames();
             }
             out << " restarts=" << s.restarts;
+            if (s.deadRebuilds) {
+                out << " dead-tap-rebuilds=" << s.deadRebuilds;
+            }
+            if (s.probe) {
+                out << " probe=on";
+            }
             if (s.backend) {
                 out << s.backend->Describe();
             }
@@ -574,14 +650,15 @@ void CallCapture::Reconcile(bool force, bool quiet)
         s.lastTapTry = now;
         s.tapDelay = s.tapLost ? std::min(s.tapDelay * 2, timing_.retryCeiling) : timing_.retry;
         s.silence.Reset();
-        if (!s.tapLost) {
-            s.tapLost = true;
+        if (!s.tapLost && !s.tapDead) {
             std::string reason;
             if (environment_->CanTapCall(reason)) {
                 reason = "the microphone and the call app's audio could not be started together";
             }
             Emit(CallEvent::CallTapLost, reason);
         }
+        s.tapLost = true;
+        s.tapDead = false;
     }
     if (!s.backend) {
         if (s.missingSince < 0) {
@@ -636,27 +713,88 @@ void CallCapture::Tick()
     }
     const bool heard = s.pipeline->TakeHeard();
     if (s.withTap) {
-        switch (s.silence.Tick(heard, environment_->CallIsPlaying(), dt)) {
-        case SilenceDetector::Change::Silent:
-            Emit(CallEvent::CallSilent);
-            if (!s.silenceRebuilt) {
-                // A tap dies when the output device changes, and nothing else reports it.
-                s.silenceRebuilt = true;
-                Reconcile(true, true);
-                return;
-            }
-            break;
-        case SilenceDetector::Change::Heard:
-            s.silenceRebuilt = false;
-            Emit(CallEvent::CallHeard);
-            break;
+        const bool playing = environment_->CallIsPlaying();
+        switch (s.silence.Tick(heard, playing, dt)) {
+        case SilenceDetector::Change::Silent: Emit(CallEvent::CallSilent); break;
+        case SilenceDetector::Change::Heard: Emit(CallEvent::CallHeard); break;
         case SilenceDetector::Change::None: break;
         }
+        WatchTap(heard, playing, now, dt);
+        if (!s.backend) {
+            return;
+        }
+    } else {
+        s.probe.reset();
     }
     if (!s.echoFailed && s.backend->EchoCancelFailed()) {
         s.echoFailed = true;
         Emit(CallEvent::EchoCancellationFailed);
     }
+}
+
+// Rebuilds the capture only when its tap is dead: Call stays zeros while the probe hears the
+// app. A rebuild that comes up dead too is retried with a growing wait, for as long as the
+// call lasts; a tap can die on an output device change or come up dead on a busy Mac, and
+// nothing else reports either.
+void CallCapture::WatchTap(bool heard, bool playing, double now, double dt)
+{
+    State& s = *state_;
+    const bool probeHeard = s.probe && s.probe->TakeHeard();
+    if (probeHeard) {
+        s.probeQuietFor = 0;
+    }
+    if (heard) {
+        s.deadTicks = 0;
+        s.rebuiltForDeath = false;
+        s.nextDeadRebuild = 0;
+        s.deadDelay = timing_.deadRetry;
+        if (s.tapDead) {
+            s.tapDead = false;
+            Emit(CallEvent::CallTapRestored);
+        }
+    }
+    const bool needed = !heard && playing && s.silence.Silent();
+    if (!needed) {
+        s.deadTicks = 0;
+        s.probeQuietFor = 0;
+        if (s.probe && now - s.lastNeeded >= timing_.probeLinger) {
+            s.probe.reset();
+        }
+        return;
+    }
+    s.lastNeeded = now;
+    if (s.probe && s.probeQuietFor >= timing_.probeRenew) {
+        s.probe.reset();
+    }
+    if (!s.probe) {
+        if (now >= s.nextProbeTry) {
+            s.probe = environment_->MakeProbe();
+            s.probeQuietFor = 0;
+            s.deadTicks = 0;
+            s.nextProbeTry = s.probe ? 0 : now + timing_.retry;
+        }
+        return;
+    }
+    if (!probeHeard) {
+        s.probeQuietFor += dt;
+        s.deadTicks = 0;
+        return;
+    }
+    // Two ticks in a row, so sound that reaches the probe a moment before the capture is
+    // not taken for a dead tap.
+    if (++s.deadTicks < 2 || now < s.nextDeadRebuild) {
+        return;
+    }
+    s.deadTicks = 0;
+    s.deadRebuilds++;
+    if (s.rebuiltForDeath && !s.tapDead) {
+        s.tapDead = true;
+        Emit(CallEvent::CallTapLost, "the call app's audio stopped arriving");
+    }
+    s.rebuiltForDeath = true;
+    s.nextDeadRebuild = now + s.deadDelay;
+    s.deadDelay = std::min(s.deadDelay * 2, timing_.deadRetryCeiling);
+    Reconcile(true, true);
 }
 
 // Delivery queue.

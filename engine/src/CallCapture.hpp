@@ -85,7 +85,19 @@ struct CallCaptureTiming
     // Retrying the call tap beside a working microphone backs off up to this.
     double retryCeiling = 60;
     double microphoneLostAfter = 10;
+    // Call zeros for this long while the app plays starts the probe that tells a dead tap
+    // from a quiet one.
     double silentAfter = 3;
+    // A tap found dead is rebuilt, then again after this wait if it is still dead, doubling
+    // up to deadRetryCeiling for as long as the call lasts.
+    double deadRetry = 1;
+    double deadRetryCeiling = 8;
+    // The probe stays this long after Call is heard again, so the pauses of one conversation
+    // share a probe instead of each making its own.
+    double probeLinger = 30;
+    // A probe that hears nothing for this long while Call is silent is made again: a tap
+    // made at a bad moment can be dead itself.
+    double probeRenew = 10;
     // No frames for this long while running restarts the capture; 0 turns it off.
     double stallAfter = 3;
     double ringSeconds = 4;
@@ -118,6 +130,20 @@ struct BackendRequest
     std::function<void()> rateChanged;
 };
 
+// A second tap of the call app, apart from the capture and clocked by the output device.
+// A call app keeps its output running through a pause and plays exact zeros, so a quiet
+// call and a dead capture tap look the same from inside the capture: the IO keeps time and
+// Call is zeros. Only another tap that hears sound tells the dead one apart.
+class CallProbe
+{
+public:
+    virtual ~CallProbe() = default;
+    // True once since the last call if the app played a sample that was not exactly zero.
+    virtual bool TakeHeard() = 0;
+    // Control queue: covers the app's processes as they are now.
+    virtual void RefreshProcesses() {}
+};
+
 // What a change reported by the system was about.
 enum class SystemChange
 {
@@ -137,8 +163,11 @@ public:
     virtual std::unique_ptr<CaptureBackend> MakeBackend(const BackendRequest& request) = 0;
     // Whether the call app's audio can be tapped now, without touching the microphone.
     virtual bool CanTapCall(std::string& reason) = 0;
-    // Whether a process of the call app is producing sound right now.
+    // Whether a process of the call app has its output running now, which a call app keeps
+    // through a pause.
     virtual bool CallIsPlaying() = 0;
+    // A running probe of the call app, or null when one cannot start now.
+    virtual std::unique_ptr<CallProbe> MakeProbe() = 0;
     // Calls changed on `queue` for each change until the returned token is destroyed.
     virtual std::shared_ptr<void> Observe(dispatch_queue_t queue,
         std::function<void(SystemChange)> changed) = 0;
@@ -189,6 +218,7 @@ private:
 
     void Reconcile(bool force, bool quiet = false);
     void Tick();
+    void WatchTap(bool heard, bool playing, double now, double dt);
     bool StartBackend(bool callTap);
     void StopBackend();
     void ReleasePipeline();

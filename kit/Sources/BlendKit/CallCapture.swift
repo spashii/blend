@@ -63,12 +63,13 @@ public final class CallCapture: @unchecked Sendable {
         case microphoneRestarted
         /// The microphone has been missing for 10 seconds. The capture keeps trying.
         case microphoneLost
-        /// The call app's audio stopped arriving and could not be rebuilt. Call is silence,
-        /// Me continues from the microphone alone, and the capture retries every 2 seconds.
+        /// The call app's audio stopped arriving and a rebuild did not bring it back. Call is
+        /// silence, Me continues from the microphone, and the capture keeps retrying.
         case callTapLost(reason: String)
         case callTapRestored
-        /// The call app has played for 3 seconds and every Call sample is zero, which is
-        /// what a revoked System Audio Recording permission looks like.
+        /// The call app's output has run for 3 seconds and every Call sample is zero: a
+        /// pause in the call, or a revoked System Audio Recording permission. A dead tap is
+        /// the capture's own concern: it checks with a second tap and rebuilds itself.
         case callSilent
         case callHeard
         /// Echo cancellation stopped working; Me continues unprocessed.
