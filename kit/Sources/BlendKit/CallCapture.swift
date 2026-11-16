@@ -23,7 +23,9 @@ public struct CallCaptureOptions: Sendable {
     public var microphoneUID: String?
     public var echoCancellation: EchoCancellation
     public var isolation: Isolation
-    /// The call app.
+    /// The call app, or `.systemAudio` for everything the Mac plays. Call is what this
+    /// carries, and echo cancellation cleans the microphone of it; a host that wants only
+    /// the microphone, free of what the Mac plays, uses `.systemAudio` and ignores Call.
     public var call: TapTarget
     /// Frames per second of what the capture delivers, fixed for its life.
     public var outputRate: Int
@@ -123,7 +125,8 @@ public final class CallCapture: @unchecked Sendable {
                         var c = BKCallCaptureOptions(
                             label: label, microphoneUID: microphone, echo: echo,
                             isolation: isolation, callBundleID: bundleID, callInstance: instance,
-                            outputRate: UInt32(max(0, options.outputRate)))
+                            outputRate: UInt32(max(0, options.outputRate)),
+                            callSystemAudio: options.call.isSystemAudio)
                         return BKCallCaptureCreate(
                             &c, Self.deliverFrames, Self.deliverEvent, retained.toOpaque())
                     }

@@ -1388,10 +1388,24 @@ void ApiTests()
         Check(capture != nullptr, "a capture is created without touching a device");
         char* text = BKCallCaptureDiagnostics(capture);
         Check(text && std::strncmp(text, "stopped", 7) == 0, "a capture that never started says so");
+        Check(text && std::strstr(text, "call=com.example.call"), "and names the app it taps");
         std::free(text);
         BKCallCaptureStop(capture);
         BKCallCaptureDestroy(capture);
         Check(true, "a capture that never started can be stopped and destroyed");
+    }
+    {
+        BKCallCaptureOptions options = {};
+        options.label = "api";
+        options.callBundleID = "com.example.call";
+        options.callSystemAudio = true;
+        BKCallCapture* capture = BKCallCaptureCreate(&options,
+            [](void*, const float*, const float*, uint32_t, uint64_t) {}, nullptr, nullptr);
+        char* text = BKCallCaptureDiagnostics(capture);
+        Check(text && std::strstr(text, "call=system-audio"),
+            "callSystemAudio taps everything the Mac plays, not the bundle ID");
+        std::free(text);
+        BKCallCaptureDestroy(capture);
     }
     Check(BKCallCaptureCreate(nullptr, nullptr, nullptr, nullptr) == nullptr,
         "no options, no capture");

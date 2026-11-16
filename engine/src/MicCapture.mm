@@ -1,5 +1,6 @@
 #include "MicCapture.hpp"
 
+#include "Apps.hpp"
 #include "HAL.hpp"
 #include "Routing.hpp"
 
@@ -68,13 +69,31 @@ void MicCapture::Emit(void* context, const float* me, const float* farEnd, uint3
     static_cast<MicCapture*>(context)->sink_->Block(me, farEnd, frames);
 }
 
+// For an app, its processes; for system audio, the processes to leave out.
+std::vector<AudioObjectID> MicCapture::TargetProcesses() const
+{
+    std::vector<int> owners;
+    for (const auto& app : options_.excludedApps) {
+        for (int pid : CopiesOf(app)) {
+            owners.push_back(pid);
+        }
+    }
+    return ProcessTap::Matching(options_.target, owners);
+}
+
 // Everything the Mac plays except this process: its output carries the mixes, which
 // contain this microphone, and cancelling them would cancel the voice.
 bool MicCapture::AddReference()
 {
     CATapDescription* description = nil;
-    if (options_.reference == Reference::Processes) {
-        processes_ = ProcessTap::Matching(options_.target, {});
+    if (options_.reference == Reference::Processes && options_.target.system) {
+        processes_ = TargetProcesses();
+        description =
+            [[CATapDescription alloc] initStereoGlobalTapButExcludeProcesses:Numbers(processes_)];
+        description.name =
+            [NSString stringWithFormat:@"%s: system audio", options_.tapPrefix.c_str()];
+    } else if (options_.reference == Reference::Processes) {
+        processes_ = TargetProcesses();
         description = [[CATapDescription alloc] initStereoMixdownOfProcesses:Numbers(processes_)];
         description.name = [NSString
             stringWithFormat:@"%s: %s", options_.tapPrefix.c_str(), options_.target.bundleID.c_str()];
@@ -161,7 +180,7 @@ void MicCapture::RefreshProcesses()
     if (!description_ || options_.reference != Reference::Processes) {
         return;
     }
-    auto now = ProcessTap::Matching(options_.target, {});
+    auto now = TargetProcesses();
     if (now == processes_) {
         return;
     }

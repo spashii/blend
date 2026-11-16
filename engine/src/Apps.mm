@@ -102,6 +102,18 @@ std::string CopyIdentity(int pid)
     return Identity(pid, RegularApp(pid));
 }
 
+std::vector<int> CopiesOf(const std::string& bundleID)
+{
+    std::vector<int> pids;
+    for (NSRunningApplication* app in
+        [NSRunningApplication runningApplicationsWithBundleIdentifier:@(bundleID.c_str())]) {
+        if (Alive(app.processIdentifier)) {
+            pids.push_back(app.processIdentifier);
+        }
+    }
+    return pids;
+}
+
 std::string AppBundleID(int pid)
 {
     NSRunningApplication* app = RegularApp(pid);

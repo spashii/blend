@@ -11,6 +11,7 @@
 
 #include "BlendEngine.h"
 #include "BlendKit.h"
+#include "Apps.hpp"
 #include "ProcessTap.hpp"
 
 #include <dlfcn.h>
@@ -1531,9 +1532,10 @@ struct CallWatch
 // OUT.call.f32 holds the peak of each 10 ms block of Call, OUT.log the events and the
 // capture's diagnostics, OUT.capture.json when position 0 was. With `kill=N@T`, the
 // capture's tap is destroyed T seconds in, and so is each tap the capture rebuilds after
-// it, N taps in all.
+// it, N taps in all. With `system`, Call is everything the Mac plays instead of the app,
+// and with `echo` echo cancellation is on.
 int CmdCallWatch(const std::string& bundle, double seconds, const std::string& out, int kills,
-    double killAt)
+    double killAt, bool system, bool echo)
 {
     if (!RequestMicrophone()) {
         return 1;
@@ -1547,8 +1549,16 @@ int CmdCallWatch(const std::string& bundle, double seconds, const std::string& o
     FILE* log = fopen((out + ".log").c_str(), "w");
     BKCallCaptureOptions options = {};
     options.label = "Blend Lab";
-    options.echo = BKEchoCancellationOff;
+    options.echo = echo ? BKEchoCancellationOn : BKEchoCancellationOff;
     options.callBundleID = bundle.c_str();
+    options.callSystemAudio = system;
+    if (system) {
+        // What the system tap leaves out: this process and Blend Mic.
+        std::vector<int> blendMic = blend::CopiesOf("app.blend.Blend");
+        auto left = blend::ProcessTap::Matching(blend::TapTarget{"", std::nullopt, true}, blendMic);
+        printf("system audio: %zu Blend Mic copies, %zu processes left out\n", blendMic.size(),
+            left.size());
+    }
     options.outputRate = 48000;
     BKCallCapture* capture = BKCallCaptureCreate(&options,
         [](void*, const float*, const float* call, uint32_t frames, uint64_t position) {
@@ -1584,7 +1594,7 @@ int CmdCallWatch(const std::string& bundle, double seconds, const std::string& o
     FILE* meta = fopen((out + ".capture.json").c_str(), "w");
     fprintf(meta, "{\"start_called\": %.6f, \"start_returned\": %.6f}\n", before, after);
     fclose(meta);
-    TapKiller killer{"Blend Lab: " + bundle, kills};
+    TapKiller killer{system ? std::string("Blend Lab: system audio") : "Blend Lab: " + bundle, kills};
     std::atomic<bool> watching{true};
     std::thread killing([&] {
         while (watching && kills > 0) {
@@ -1634,7 +1644,7 @@ void Usage()
     printf("usage: lab devices | mixes | mixes-set JSON | play SECONDS | record UID SECONDS [OUT.wav] |\n"
            "           loop UID SECONDS | stress ITERATIONS [PAUSE_MS] | remove-live | procs |\n"
            "           tap BUNDLE_PREFIX SECONDS [--no-responsible] | record-echo SECONDS OUT.wav |\n"
-           "           access | tapdead BUNDLE SECONDS [MUTED_FILE] | callwatch BUNDLE SECONDS OUT [kill=N@T]\n");
+           "           access | tapdead BUNDLE SECONDS [MUTED_FILE] | callwatch BUNDLE SECONDS OUT [kill=N@T] [system] [echo]\n");
 }
 
 } // namespace
@@ -1705,10 +1715,13 @@ int main(int argc, const char* argv[])
         if (cmd == "callwatch" && argc > 4) {
             int kills = 0;
             double killAt = 0;
+            bool system = false, echo = false;
             for (int i = 5; i < argc; i++) {
                 sscanf(argv[i], "kill=%d@%lf", &kills, &killAt);
+                system = system || std::string(argv[i]) == "system";
+                echo = echo || std::string(argv[i]) == "echo";
             }
-            return CmdCallWatch(arg(2), std::stod(arg(3)), arg(4), kills, killAt);
+            return CmdCallWatch(arg(2), std::stod(arg(3)), arg(4), kills, killAt, system, echo);
         }
         if (cmd == "access") {
             if (!RequestMicrophone()) {

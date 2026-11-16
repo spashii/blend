@@ -23,6 +23,8 @@ public:
     {
         std::string bundleID;
         std::optional<std::string> instance;
+        // Everything the Mac plays but this process; bundleID and instance are ignored.
+        bool system = false;
     };
 
     // Taps are named "<label>: <bundle id>", which other apps' audio lists show.

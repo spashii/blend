@@ -4,16 +4,17 @@
 # does and `yes` keeps every core busy. score.py then counts the capture's rebuilds and any
 # Call silence that is not in the source.
 #
-# Usage: run.sh BUILD_DIR OUT_PREFIX SECONDS [LOAD] [kill=N@T]
+# Usage: run.sh BUILD_DIR OUT_PREFIX SECONDS [LOAD] [OPTION...]
 # LOAD is the number of `yes` processes, all at nice 19; the default is one per core.
 # kill=N@T destroys the capture's tap T seconds in, and each tap it rebuilds after that,
-# N taps in all, as on the call where a rebuild came up dead.
+# N taps in all, as on the call where a rebuild came up dead. `system` records everything the
+# Mac plays as Call instead of the speaker alone, and `echo` turns echo cancellation on.
 set -eu
 build=${1:A}
 out=${2:A}
 seconds=$3
 load=${4:-$(sysctl -n hw.ncpu)}
-extra=${5:-}
+extra=(${@:5})
 here=${0:A:h}
 lab="$build/spikes/lab/BlendLab.app"
 speaker="$build/spikes/lab/BlendLabSpeaker.app"

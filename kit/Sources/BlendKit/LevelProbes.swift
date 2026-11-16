@@ -20,8 +20,9 @@ public final class LevelProbes: @unchecked Sendable {
     /// not on the main thread. An app whose tap cannot start reads as silence and is tried
     /// again when the process list changes.
     public func set(_ targets: [TapTarget]) {
-        let rows = targets.map { target -> [String: String] in
-            var row = ["bundleID": target.bundleID]
+        let rows = targets.map { target -> [String: Any] in
+            if target.isSystemAudio { return ["systemAudio": true] }
+            var row: [String: Any] = ["bundleID": target.bundleID]
             if let instance = target.instance { row["instance"] = instance }
             return row
         }

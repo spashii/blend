@@ -26,6 +26,9 @@ int OwnerPID(int pid);
 // The copy identity of an app process; reads its launch arguments.
 std::string CopyIdentity(int pid);
 
+// The pids of the running copies of an app.
+std::vector<int> CopiesOf(const std::string& bundleID);
+
 // Bundle ID of a regular app process, or empty.
 std::string AppBundleID(int pid);
 

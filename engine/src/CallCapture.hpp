@@ -1,7 +1,8 @@
 #pragma once
 
-// Records both sides of a call: the microphone as Me and what a call app plays as Call, at
-// the same instants and one rate, for a host that has no mixer or driver.
+// Records both sides of a call: the microphone as Me and what a call app plays as Call, or
+// everything the Mac plays, at the same instants and one rate, for a host that has no mixer
+// or driver.
 //
 // The microphone and a tap of the call app's processes run in one private aggregate device,
 // so both arrive in one IO cycle on one clock, and echo cancellation can use the call as its
@@ -73,6 +74,9 @@ struct CallCaptureOptions
     MicProcessor::Isolation isolation = MicProcessor::Isolation::Off;
     std::string callBundleID;
     std::optional<std::string> callInstance;
+    // Call is everything the Mac plays, except this process and Blend Mic, instead of one
+    // app. It is also the far end, so echo cancellation cleans the microphone of all of it.
+    bool callSystemAudio = false;
     // Zero is 48000. Fixed for the life of the capture, whatever the devices do.
     uint32_t outputRate = 0;
 };

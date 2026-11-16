@@ -78,6 +78,20 @@ private let kitFolder = URL(fileURLWithPath: #filePath)
         capture.stop()
     }
 
+    @Test func systemAudioReachesTheEngine() {
+        #expect(TapTarget.systemAudio.isSystemAudio)
+        #expect(!TapTarget(bundleID: "us.zoom.xos").isSystemAudio)
+        #expect(TapTarget.systemAudio != TapTarget(bundleID: ""))
+        let capture = CallCapture(
+            options: CallCaptureOptions(label: "Test", call: .systemAudio),
+            frames: { _, _, _ in }, events: { _ in })
+        #expect(capture.diagnostics.contains("call=system-audio"))
+        let app = CallCapture(
+            options: CallCaptureOptions(label: "Test", call: TapTarget(bundleID: "us.zoom.xos")),
+            frames: { _, _, _ in }, events: { _ in })
+        #expect(app.diagnostics.contains("call=us.zoom.xos"))
+    }
+
     @Test func mapsEveryEvent() {
         let kinds: [(BKEventKind, CallCapture.Event)] = [
             (BKEventMicrophoneRestarted, .microphoneRestarted),

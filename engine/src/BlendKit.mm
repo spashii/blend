@@ -70,6 +70,7 @@ BKCallCapture* BKCallCaptureCreate(const BKCallCaptureOptions* options, BKFrames
     if (options->callInstance) {
         copy.callInstance = options->callInstance;
     }
+    copy.callSystemAudio = options->callSystemAudio;
     copy.outputRate = options->outputRate;
     auto result = new BKCallCapture;
     result->capture = std::make_unique<blend::CallCapture>(std::move(copy),
@@ -118,6 +119,10 @@ bool BKProbesSet(BKProbes* probes, const char* json, char* error, size_t errorSi
     std::vector<blend::Probes::Target> targets;
     try {
         for (const auto& item : nlohmann::json::parse(json ? json : "[]")) {
+            if (item.value("systemAudio", false)) {
+                targets.push_back({"", std::nullopt, true});
+                continue;
+            }
             std::optional<std::string> instance;
             if (item.contains("instance") && item["instance"].is_string()) {
                 instance = item["instance"].get<std::string>();

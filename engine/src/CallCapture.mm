@@ -1,5 +1,6 @@
 #include "CallCapture.hpp"
 
+#include "Apps.hpp"
 #include "HAL.hpp"
 #include "MicCapture.hpp"
 #include "ProcessTap.hpp"
@@ -19,6 +20,20 @@ namespace blend {
 namespace {
 
 constexpr uint32_t kDefaultRate = 48000;
+// Blend Mic's output carries its mixes, which hold the microphone, so system audio as Call
+// leaves it out, as it leaves out the host.
+const std::vector<std::string> kSystemExclusions = {"app.blend.Blend"};
+
+std::vector<int> ExcludedOwners()
+{
+    std::vector<int> owners;
+    for (const auto& app : kSystemExclusions) {
+        for (int pid : CopiesOf(app)) {
+            owners.push_back(pid);
+        }
+    }
+    return owners;
+}
 // Tags a capture's delivery queue with the capture, so Stop can tell its own callback from
 // another capture's.
 char deliveryKey;
@@ -69,7 +84,8 @@ class CoreAudioProbe : public CallProbe, FrameSink
 {
 public:
     CoreAudioProbe(TapTarget target, const std::string& label)
-        : tap_(std::move(target), label + " probe")
+        : system_(target.system)
+        , tap_(std::move(target), label + " probe")
     {
     }
     ~CoreAudioProbe() override { tap_.Stop(); }
@@ -77,10 +93,19 @@ public:
     bool Start()
     {
         hal::Get(kAudioObjectSystemObject, kAudioHardwarePropertyDefaultOutputDevice, output_);
+        if (system_) {
+            tap_.SetExcludedOwners(ExcludedOwners());
+        }
         return tap_.Start(*this);
     }
     bool TakeHeard() override { return heard_.exchange(false, std::memory_order_relaxed); }
-    void RefreshProcesses() override { tap_.RefreshProcesses(); }
+    void RefreshProcesses() override
+    {
+        if (system_) {
+            tap_.SetExcludedOwners(ExcludedOwners());
+        }
+        tap_.RefreshProcesses();
+    }
     // The tap's aggregate is clocked by the output device it started on.
     bool Stale() override
     {
@@ -111,6 +136,7 @@ public:
     }
 
 private:
+    const bool system_;
     ProcessTap tap_;
     AudioObjectID output_ = kAudioObjectUnknown;
     std::atomic<bool> heard_{false};
@@ -168,21 +194,24 @@ public:
         options.passThrough = true;
         options.queue = request.queue;
         options.onRateChange = request.rateChanged;
-        options.target = TapTarget{options_.callBundleID, options_.callInstance, false};
+        options.target = Target();
+        if (options_.callSystemAudio) {
+            options.excludedApps = kSystemExclusions;
+        }
         options.tapPrefix = options_.label;
         return std::make_unique<CoreAudioBackend>(std::move(options));
     }
 
     bool CanTapCall(std::string& reason) override
     {
-        const auto processes =
-            ProcessTap::Matching(TapTarget{options_.callBundleID, options_.callInstance, false}, {});
+        const auto processes = ProcessTap::Matching(Target(), Excluded());
         NSMutableArray* numbers = [NSMutableArray array];
         for (AudioObjectID process : processes) {
             [numbers addObject:@(process)];
         }
-        CATapDescription* description =
-            [[CATapDescription alloc] initStereoMixdownOfProcesses:numbers];
+        CATapDescription* description = options_.callSystemAudio
+            ? [[CATapDescription alloc] initStereoGlobalTapButExcludeProcesses:numbers]
+            : [[CATapDescription alloc] initStereoMixdownOfProcesses:numbers];
         description.name = [NSString stringWithFormat:@"%s: probe", options_.label.c_str()];
         description.privateTap = YES;
         AudioObjectID tap = kAudioObjectUnknown;
@@ -198,8 +227,19 @@ public:
 
     bool CallIsPlaying() override
     {
-        for (AudioObjectID process :
-            ProcessTap::Matching(TapTarget{options_.callBundleID, options_.callInstance, false}, {})) {
+        std::vector<AudioObjectID> processes = ProcessTap::Matching(Target(), Excluded());
+        if (options_.callSystemAudio) {
+            // Matching gives the processes left out; everything else counts.
+            const auto excluded = std::move(processes);
+            processes.clear();
+            for (AudioObjectID process : hal::GetArray<AudioObjectID>(kAudioObjectSystemObject,
+                     kAudioHardwarePropertyProcessObjectList)) {
+                if (std::find(excluded.begin(), excluded.end(), process) == excluded.end()) {
+                    processes.push_back(process);
+                }
+            }
+        }
+        for (AudioObjectID process : processes) {
             UInt32 running = 0;
             if (hal::Get(process, kAudioProcessPropertyIsRunningOutput, running) && running) {
                 return true;
@@ -210,8 +250,7 @@ public:
 
     std::unique_ptr<CallProbe> MakeProbe() override
     {
-        auto probe = std::make_unique<CoreAudioProbe>(
-            TapTarget{options_.callBundleID, options_.callInstance, false}, options_.label);
+        auto probe = std::make_unique<CoreAudioProbe>(Target(), options_.label);
         return probe->Start() ? std::move(probe) : nullptr;
     }
 
@@ -230,6 +269,16 @@ public:
     }
 
 private:
+    std::vector<int> Excluded() const
+    {
+        return options_.callSystemAudio ? ExcludedOwners() : std::vector<int>{};
+    }
+
+    TapTarget Target() const
+    {
+        return TapTarget{options_.callBundleID, options_.callInstance, options_.callSystemAudio};
+    }
+
     const CallCaptureOptions options_;
 };
 
@@ -531,7 +580,8 @@ std::string CallCapture::Diagnostics()
     dispatch_sync(control_, ^{
         const State& s = *state_;
         std::ostringstream out;
-        out << (s.running ? "running" : "stopped");
+        out << (s.running ? "running" : "stopped") << " call="
+            << (options_.callSystemAudio ? "system-audio" : options_.callBundleID);
         if (s.running) {
             out << " microphone=" << s.microphoneUID << " call-tap="
                 << (s.withTap ? "on" : (s.tapLost ? "lost" : "off"));

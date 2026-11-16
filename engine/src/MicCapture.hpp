@@ -47,8 +47,11 @@ public:
         // Gather 10 ms blocks even with every stage off. Implied once a reference is
         // running, because the far end only travels in blocks.
         bool passThrough = false;
-        // Reference::Processes only. The tap is named "<tapPrefix>: <bundle id>".
+        // Reference::Processes only. The tap is named "<tapPrefix>: <bundle id>", or
+        // "<tapPrefix>: system audio" for a system target, which leaves out this process and
+        // every running copy of the apps in excludedApps.
         TapTarget target;
+        std::vector<std::string> excludedApps;
         std::string tapPrefix;
         // Called on `queue` as soon as the device's or the aggregate's sample rate changes,
         // so a host need not wait for its next NeedsRestart poll. Not set: not watched.
@@ -90,6 +93,7 @@ private:
         const AudioTimeStamp*, AudioBufferList*, const AudioTimeStamp*, void* context);
     static void Emit(void* context, const float* me, const float* farEnd, uint32_t frames);
     bool AddReference();
+    std::vector<AudioObjectID> TargetProcesses() const;
     void WatchRates();
     void UnwatchRates();
 

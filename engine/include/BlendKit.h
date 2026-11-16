@@ -83,6 +83,11 @@ typedef struct
     // Frames per second of what the callback receives, fixed for the capture's life; 0 is
     // 48000.
     uint32_t outputRate;
+    // Call is everything the Mac plays, except this process and Blend Mic, whose output
+    // carries its mixes; callBundleID and callInstance are ignored. It is also the far end,
+    // so with echo cancellation on, Me is cleaned of all of it. A host that records only
+    // the microphone, cleaned of what the Mac plays, sets this and ignores Call.
+    bool callSystemAudio;
 } BKCallCaptureOptions;
 
 // Me and Call are mono, at outputRate, for the same instants. `position` counts output
@@ -108,8 +113,8 @@ char* BKCallCaptureDiagnostics(BKCallCapture* capture);
 
 // Meters app copies without capturing them for anything else.
 BKProbes* BKProbesCreate(const char* label);
-// `json` is an array of {"bundleID", "instance"} (instance optional); an empty array stops
-// metering. On a parse failure returns false and writes a message into error.
+// `json` is an array of {"bundleID", "instance"} (instance optional), or {"systemAudio": true}
+// for everything the Mac plays but this process; an empty array stops metering. On a parse failure returns false and writes a message into error.
 bool BKProbesSet(BKProbes* probes, const char* json, char* error, size_t errorSize);
 // Peak since the previous call for each probed copy, in the order given, 0 to 1. Returns
 // the number written.

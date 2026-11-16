@@ -10,7 +10,7 @@ namespace blend {
 struct Probes::Probe : FrameSink
 {
     Probe(Target target, const std::string& label)
-        : tap(TapTarget{target.bundleID, target.instance, false}, label)
+        : tap(TapTarget{target.bundleID, target.instance, target.system}, label)
     {
     }
     ~Probe() { tap.Stop(); }

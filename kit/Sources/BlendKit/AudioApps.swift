@@ -55,9 +55,21 @@ public enum AudioApps {
 public struct TapTarget: Sendable, Hashable {
     public var bundleID: String
     public var instance: String?
+    /// Everything the Mac plays except this app, and except Blend Mic, whose output carries
+    /// its mixes. bundleID and instance are ignored.
+    public var isSystemAudio: Bool
 
     public init(bundleID: String, instance: String? = nil) {
         self.bundleID = bundleID
         self.instance = instance
+        self.isSystemAudio = false
     }
+
+    /// For a recording when no call app is in use, such as a phone call the Mac plays, or as
+    /// the echo reference of a recording that keeps only the microphone.
+    public static let systemAudio: TapTarget = {
+        var target = TapTarget(bundleID: "")
+        target.isSystemAudio = true
+        return target
+    }()
 }
