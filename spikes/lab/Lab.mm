@@ -10,6 +10,8 @@
 #import <Foundation/Foundation.h>
 
 #include "BlendEngine.h"
+#include "BlendKit.h"
+#include "ProcessTap.hpp"
 
 #include <dlfcn.h>
 #include <libproc.h>
@@ -20,6 +22,7 @@
 #include <atomic>
 #include <chrono>
 #include <climits>
+#include <mutex>
 #include <cmath>
 #include <cstdio>
 #include <set>
@@ -1169,12 +1172,402 @@ int CmdEngine(const std::string& path, double seconds, const std::string& recent
     return 0;
 }
 
+// Call tap tests (spikes/call-tap)
+
+double UptimeSeconds()
+{
+    return double(clock_gettime_nsec_np(CLOCK_UPTIME_RAW)) / 1e9;
+}
+
+NSArray<NSNumber*>* Numbers(const std::vector<AudioObjectID>& objects)
+{
+    NSMutableArray* numbers = [NSMutableArray array];
+    for (auto o : objects) {
+        [numbers addObject:@(o)];
+    }
+    return numbers;
+}
+
+// Keeps a muting tap over an app's audio processes, so a test player never reaches the
+// speakers. Taps of the app still hear it. Writes `marker` once the app is muted.
+struct MuteGuard
+{
+    blend::TapTarget target;
+    std::string marker;
+    AudioObjectID tap = kAudioObjectUnknown;
+    std::vector<AudioObjectID> processes;
+
+    bool Update()
+    {
+        auto now = blend::ProcessTap::Matching(target, {});
+        if (now.empty() || now == processes) {
+            return tap != kAudioObjectUnknown;
+        }
+        CATapDescription* desc = [[CATapDescription alloc] initStereoMixdownOfProcesses:Numbers(now)];
+        desc.name = @"Blend lab mute";
+        desc.privateTap = YES;
+        desc.muteBehavior = CATapMuted;
+        AudioObjectID fresh = kAudioObjectUnknown;
+        if (AudioHardwareCreateProcessTap(desc, &fresh) != noErr) {
+            printf("mute tap failed\n");
+            return tap != kAudioObjectUnknown;
+        }
+        if (tap != kAudioObjectUnknown) {
+            AudioHardwareDestroyProcessTap(tap);
+        }
+        tap = fresh;
+        processes = now;
+        if (!marker.empty()) {
+            [[NSData data] writeToFile:@(marker.c_str()) atomically:YES];
+        }
+        printf("muted %zu process(es) of %s\n", now.size(), target.bundleID.c_str());
+        return true;
+    }
+    ~MuteGuard()
+    {
+        if (tap != kAudioObjectUnknown) {
+            AudioHardwareDestroyProcessTap(tap);
+        }
+    }
+};
+
+bool WaitForMute(MuteGuard& guard, double seconds)
+{
+    for (double waited = 0; waited < seconds; waited += 0.1) {
+        if (guard.Update()) {
+            return true;
+        }
+        Sleep(0.1);
+    }
+    printf("%s has no audio process to mute\n", guard.target.bundleID.c_str());
+    return false;
+}
+
+// Hears whether any sample of a tap was not exactly zero, as BlendKit's probe does.
+struct HeardSink : blend::FrameSink
+{
+    std::atomic<bool> heard{false};
+    void Raw(const AudioBufferList* input, blend::routing::ChannelSpan span) override
+    {
+        for (uint32_t index = span.first; span.count == 0 || index < span.first + span.count;
+             index++) {
+            const auto channel = blend::routing::ChannelAt(input, index);
+            if (!channel) {
+                break;
+            }
+            for (uint32_t i = 0, n = blend::routing::Frames(input); i < n; i++) {
+                if (channel[i] != 0.0f) {
+                    heard.store(true, std::memory_order_relaxed);
+                    return;
+                }
+            }
+        }
+    }
+};
+
+struct DeadWatch
+{
+    UInt32 micChannels = 0;
+    std::atomic<uint64_t> cycles{0};
+    std::atomic<double> sampleTime{0};
+    std::atomic<uint64_t> hostTime{0};
+    std::atomic<bool> tapHeard{false};
+    std::atomic<uint32_t> channels{0};
+};
+
+OSStatus DeadWatchProc(AudioObjectID, const AudioTimeStamp*, const AudioBufferList* in,
+    const AudioTimeStamp* inTime, AudioBufferList*, const AudioTimeStamp*, void* ctx)
+{
+    auto& w = *static_cast<DeadWatch*>(ctx);
+    w.cycles.fetch_add(1, std::memory_order_relaxed);
+    w.sampleTime.store(inTime->mSampleTime, std::memory_order_relaxed);
+    w.hostTime.store(inTime->mHostTime, std::memory_order_relaxed);
+    uint32_t channel = 0;
+    for (UInt32 b = 0; b < in->mNumberBuffers; b++) {
+        const auto& buffer = in->mBuffers[b];
+        auto data = static_cast<const float*>(buffer.mData);
+        const UInt32 stride = buffer.mNumberChannels;
+        const UInt32 frames = stride ? buffer.mDataByteSize / sizeof(float) / stride : 0;
+        for (UInt32 c = 0; c < stride; c++, channel++) {
+            if (channel < w.micChannels || !data) {
+                continue;
+            }
+            for (UInt32 i = 0; i < frames; i++) {
+                if (data[size_t(i) * stride + c] != 0.0f) {
+                    w.tapHeard.store(true, std::memory_order_relaxed);
+                    break;
+                }
+            }
+        }
+    }
+    w.channels.store(channel, std::memory_order_relaxed);
+    return noErr;
+}
+
+// What a dead tap and a quiet app look like from inside a capture built the way BlendKit
+// builds it (the default microphone and a tap of the app in one aggregate), against a probe
+// tap of its own. A third of the way in the tap's process list is emptied, so it delivers
+// zeros while the app plays; at two thirds it is restored; at five sixths it is destroyed
+// under the running aggregate.
+int CmdTapDead(const std::string& bundle, double seconds, const std::string& marker)
+{
+    if (!RequestMicrophone()) {
+        return 1;
+    }
+    MuteGuard mute{blend::TapTarget{bundle, std::nullopt, false}, marker};
+    if (!WaitForMute(mute, 30)) {
+        return 1;
+    }
+    AudioObjectID input = kAudioObjectUnknown;
+    GetProp(kAudioObjectSystemObject, kAudioHardwarePropertyDefaultInputDevice, input);
+    const std::string micUID = GetString(input, kAudioDevicePropertyDeviceUID);
+    auto processes = blend::ProcessTap::Matching(mute.target, {});
+    CATapDescription* desc = [[CATapDescription alloc] initStereoMixdownOfProcesses:Numbers(processes)];
+    desc.name = @"Blend lab capture";
+    desc.privateTap = YES;
+    desc.muteBehavior = CATapUnmuted;
+    AudioObjectID tap = kAudioObjectUnknown;
+    if (AudioHardwareCreateProcessTap(desc, &tap) != noErr) {
+        printf("create tap failed\n");
+        return 1;
+    }
+    NSString* mic = @(micUID.c_str());
+    NSDictionary* agg = @{
+        @kAudioAggregateDeviceNameKey : @"Blend lab capture",
+        @kAudioAggregateDeviceUIDKey : [NSUUID UUID].UUIDString,
+        @kAudioAggregateDeviceMainSubDeviceKey : mic,
+        @kAudioAggregateDeviceIsPrivateKey : @YES,
+        @kAudioAggregateDeviceIsStackedKey : @NO,
+        @kAudioAggregateDeviceTapAutoStartKey : @NO,
+        @kAudioAggregateDeviceSubDeviceListKey : @[ @{@kAudioSubDeviceUIDKey : mic} ],
+        @kAudioAggregateDeviceTapListKey : @[ @{
+            @kAudioSubTapUIDKey : @(GetString(tap, kAudioTapPropertyUID).c_str()),
+            @kAudioSubTapDriftCompensationKey : @YES
+        } ],
+    };
+    AudioObjectID aggregate = kAudioObjectUnknown;
+    if (AudioHardwareCreateAggregateDevice((__bridge CFDictionaryRef)agg, &aggregate) != noErr) {
+        printf("create aggregate failed\n");
+        AudioHardwareDestroyProcessTap(tap);
+        return 1;
+    }
+    DeadWatch watch;
+    watch.micChannels = Channels(input, kAudioObjectPropertyScopeInput);
+
+    // Every notification the capture could have listened for.
+    std::mutex logMutex;
+    std::vector<std::string> notes;
+    dispatch_queue_t queue = dispatch_queue_create("lab.tapdead", DISPATCH_QUEUE_SERIAL);
+    struct Watched
+    {
+        AudioObjectID object;
+        AudioObjectPropertySelector selector;
+        AudioObjectPropertyScope scope;
+        const char* name;
+        AudioObjectPropertyListenerBlock block;
+    };
+    std::vector<Watched> watched = {
+        {aggregate, kAudioDevicePropertyDeviceIsAlive, kAudioObjectPropertyScopeGlobal, "aggregate alive"},
+        {aggregate, kAudioDevicePropertyDeviceHasChanged, kAudioObjectPropertyScopeGlobal, "aggregate changed"},
+        {aggregate, kAudioDevicePropertyDeviceIsRunningSomewhere, kAudioObjectPropertyScopeGlobal, "aggregate running somewhere"},
+        {aggregate, kAudioDevicePropertyStreamConfiguration, kAudioObjectPropertyScopeInput, "aggregate input layout"},
+        {aggregate, kAudioDevicePropertyStreams, kAudioObjectPropertyScopeInput, "aggregate input streams"},
+        {aggregate, kAudioAggregateDevicePropertyTapList, kAudioObjectPropertyScopeGlobal, "aggregate tap list"},
+        {aggregate, kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyScopeGlobal, "aggregate rate"},
+        {aggregate, kAudioDeviceProcessorOverload, kAudioObjectPropertyScopeGlobal, "aggregate overload"},
+        {tap, kAudioTapPropertyDescription, kAudioObjectPropertyScopeGlobal, "tap description"},
+        {tap, kAudioTapPropertyFormat, kAudioObjectPropertyScopeGlobal, "tap format"},
+        {kAudioObjectSystemObject, kAudioHardwarePropertyProcessObjectList, kAudioObjectPropertyScopeGlobal, "process list"},
+        {kAudioObjectSystemObject, kAudioHardwarePropertyDefaultOutputDevice, kAudioObjectPropertyScopeGlobal, "default output"},
+        {kAudioObjectSystemObject, kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeGlobal, "device list"},
+        {kAudioObjectSystemObject, kAudioHardwarePropertyTapList, kAudioObjectPropertyScopeGlobal, "system tap list"},
+    };
+    // Blocks copy what they capture, so they reach these through pointers.
+    std::mutex* noteMutex = &logMutex;
+    std::vector<std::string>* noteList = &notes;
+    for (auto& w : watched) {
+        const char* name = w.name;
+        w.block = ^(UInt32, const AudioObjectPropertyAddress*) {
+            std::lock_guard lock(*noteMutex);
+            noteList->push_back(name);
+        };
+        auto a = Addr(w.selector, w.scope);
+        AudioObjectAddPropertyListenerBlock(w.object, &a, queue, w.block);
+    }
+    for (AudioObjectID process : processes) {
+        auto a = Addr(kAudioProcessPropertyIsRunningOutput);
+        AudioObjectAddPropertyListenerBlock(process, &a, queue, ^(UInt32, const AudioObjectPropertyAddress*) {
+            std::lock_guard lock(*noteMutex);
+            noteList->push_back("app output running");
+        });
+    }
+
+    AudioDeviceIOProcID proc = nullptr;
+    AudioDeviceCreateIOProcID(aggregate, DeadWatchProc, &watch, &proc);
+    AudioDeviceStart(aggregate, proc);
+    HeardSink probeSink;
+    blend::ProcessTap probe(mute.target, "Blend lab probe");
+    if (!probe.Start(probeSink)) {
+        printf("probe failed to start\n");
+    }
+    mach_timebase_info_data_t base;
+    mach_timebase_info(&base);
+    printf("t phase cycles/s sampletime/s hosttime/s channels tap-heard probe-heard app-output notes\n");
+    uint64_t lastCycles = 0;
+    double lastSample = 0;
+    uint64_t lastHost = 0;
+    const char* phase = "live";
+    for (int i = 0; i < int(seconds); i++) {
+        if (i == int(seconds / 3)) {
+            desc.processes = @[];
+            auto a = Addr(kAudioTapPropertyDescription);
+            CATapDescription* value = desc;
+            OSStatus e = AudioObjectSetPropertyData(tap, &a, 0, nullptr, sizeof(value), &value);
+            phase = e == noErr ? "emptied" : "empty-failed";
+        } else if (i == int(seconds * 2 / 3)) {
+            desc.processes = Numbers(processes);
+            auto a = Addr(kAudioTapPropertyDescription);
+            CATapDescription* value = desc;
+            AudioObjectSetPropertyData(tap, &a, 0, nullptr, sizeof(value), &value);
+            phase = "restored";
+        } else if (i == int(seconds * 5 / 6)) {
+            OSStatus e = AudioHardwareDestroyProcessTap(tap);
+            phase = e == noErr ? "destroyed" : "destroy-failed";
+        }
+        Sleep(1);
+        const uint64_t cycles = watch.cycles.load();
+        const double sample = watch.sampleTime.load();
+        const uint64_t host = watch.hostTime.load();
+        UInt32 output = 0;
+        for (AudioObjectID process : processes) {
+            UInt32 running = 0;
+            if (GetProp(process, kAudioProcessPropertyIsRunningOutput, running) && running) {
+                output = 1;
+            }
+        }
+        std::string joined;
+        {
+            std::lock_guard lock(logMutex);
+            for (auto& n : notes) {
+                joined += (joined.empty() ? "" : ", ") + n;
+            }
+            notes.clear();
+        }
+        printf("%3d %-9s %4llu %8.0f %6.3f %u %d %d %u %s\n", i + 1, phase,
+            (unsigned long long)(cycles - lastCycles), sample - lastSample,
+            double(host - lastHost) * base.numer / base.denom / 1e9, watch.channels.load(),
+            watch.tapHeard.exchange(false) ? 1 : 0, probeSink.heard.exchange(false) ? 1 : 0,
+            output, joined.c_str());
+        lastCycles = cycles;
+        lastSample = sample;
+        lastHost = host;
+    }
+    probe.Stop();
+    AudioDeviceStop(aggregate, proc);
+    AudioDeviceDestroyIOProcID(aggregate, proc);
+    for (auto& w : watched) {
+        auto a = Addr(w.selector, w.scope);
+        AudioObjectRemovePropertyListenerBlock(w.object, &a, queue, w.block);
+    }
+    AudioHardwareDestroyAggregateDevice(aggregate);
+    AudioHardwareDestroyProcessTap(tap);
+    return 0;
+}
+
+struct CallWatch
+{
+    std::mutex mutex;
+    std::vector<float> peaks; // Call, per 10 ms block of output position
+    std::vector<std::string> events;
+    double started = 0;
+};
+
+// Records an app through BlendKit's call capture the way Dictate does, with the app muted:
+// OUT.call.f32 holds the peak of each 10 ms block of Call, OUT.log the events and the
+// capture's diagnostics, OUT.capture.json when position 0 was.
+int CmdCallWatch(const std::string& bundle, double seconds, const std::string& out)
+{
+    if (!RequestMicrophone()) {
+        return 1;
+    }
+    MuteGuard mute{blend::TapTarget{bundle, std::nullopt, false}, out + ".muted"};
+    if (!WaitForMute(mute, 30)) {
+        return 1;
+    }
+    static CallWatch watch;
+    watch.peaks.reserve(size_t(seconds * 100) + 1000);
+    FILE* log = fopen((out + ".log").c_str(), "w");
+    BKCallCaptureOptions options = {};
+    options.label = "Blend Lab";
+    options.echo = BKEchoCancellationOff;
+    options.callBundleID = bundle.c_str();
+    options.outputRate = 48000;
+    BKCallCapture* capture = BKCallCaptureCreate(&options,
+        [](void*, const float*, const float* call, uint32_t frames, uint64_t position) {
+            std::lock_guard lock(watch.mutex);
+            for (uint32_t i = 0; i < frames; i++) {
+                const size_t block = size_t((position + i) / 480);
+                if (block >= watch.peaks.size()) {
+                    watch.peaks.resize(block + 1, 0.0f);
+                }
+                watch.peaks[block] = std::max(watch.peaks[block], std::fabs(call[i]));
+            }
+        },
+        [](void* context, BKEventKind kind, const char* detail) {
+            static const char* names[] = {"", "microphoneRestarted", "microphoneLost",
+                "callTapLost", "callTapRestored", "callSilent", "callHeard",
+                "echoCancellationFailed", "overflow", "audioServiceRestarted"};
+            char line[512];
+            snprintf(line, sizeof(line), "%.3f event %s %s", UptimeSeconds() - watch.started,
+                int(kind) < 10 ? names[kind] : "?", detail ? detail : "");
+            fprintf(static_cast<FILE*>(context), "%s\n", line);
+            fflush(static_cast<FILE*>(context));
+        },
+        log);
+    const double before = UptimeSeconds();
+    watch.started = before;
+    const BKStartResult started = BKCallCaptureStart(capture);
+    const double after = UptimeSeconds();
+    printf("start: %d in %.3f s\n", int(started), after - before);
+    if (started != BKStartStarted) {
+        BKCallCaptureDestroy(capture);
+        return 1;
+    }
+    FILE* meta = fopen((out + ".capture.json").c_str(), "w");
+    fprintf(meta, "{\"start_called\": %.6f, \"start_returned\": %.6f}\n", before, after);
+    fclose(meta);
+    for (int i = 1; i <= int(seconds); i++) {
+        Sleep(1);
+        mute.Update();
+        if (i % 10 == 0 || i == int(seconds)) {
+            char* text = BKCallCaptureDiagnostics(capture);
+            fprintf(log, "%.3f diag %s\n", UptimeSeconds() - before, text);
+            fflush(log);
+            if (i % 60 == 0) {
+                printf("%d s: %s\n", i, text);
+            }
+            free(text);
+        }
+    }
+    BKCallCaptureStop(capture);
+    char* text = BKCallCaptureDiagnostics(capture);
+    free(text);
+    BKCallCaptureDestroy(capture);
+    fclose(log);
+    std::lock_guard lock(watch.mutex);
+    FILE* f = fopen((out + ".call.f32").c_str(), "wb");
+    fwrite(watch.peaks.data(), sizeof(float), watch.peaks.size(), f);
+    fclose(f);
+    printf("wrote %zu blocks\n", watch.peaks.size());
+    return 0;
+}
+
 void Usage()
 {
     printf("usage: lab devices | mixes | mixes-set JSON | play SECONDS | record UID SECONDS [OUT.wav] |\n"
            "           loop UID SECONDS | stress ITERATIONS [PAUSE_MS] | remove-live | procs |\n"
            "           tap BUNDLE_PREFIX SECONDS [--no-responsible] | record-echo SECONDS OUT.wav |\n"
-           "           access\n");
+           "           access | tapdead BUNDLE SECONDS [MUTED_FILE] | callwatch BUNDLE SECONDS OUT\n");
 }
 
 } // namespace
@@ -1239,8 +1632,27 @@ int main(int argc, const char* argv[])
         if (cmd == "engine" && argc > 2) {
             return CmdEngine(arg(2), std::stod(arg(3, "10")), arg(4));
         }
+        if (cmd == "tapdead" && argc > 3) {
+            return CmdTapDead(arg(2), std::stod(arg(3)), arg(4));
+        }
+        if (cmd == "callwatch" && argc > 4) {
+            return CmdCallWatch(arg(2), std::stod(arg(3)), arg(4));
+        }
         if (cmd == "access") {
-            return RequestMicrophone() ? 0 : 1;
+            if (!RequestMicrophone()) {
+                return 1;
+            }
+            // Creating a tap is what asks for System Audio Recording.
+            CATapDescription* desc =
+                [[CATapDescription alloc] initStereoGlobalTapButExcludeProcesses:@[]];
+            desc.privateTap = YES;
+            AudioObjectID tap = kAudioObjectUnknown;
+            const OSStatus status = AudioHardwareCreateProcessTap(desc, &tap);
+            printf("system audio tap: %s\n", status == noErr ? "created" : FourCC(status).c_str());
+            if (status == noErr) {
+                AudioHardwareDestroyProcessTap(tap);
+            }
+            return 0;
         }
         Usage();
         return 2;
