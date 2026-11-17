@@ -8,6 +8,7 @@
 #include "../src/CallCapture.hpp"
 #include "../src/CallPipeline.hpp"
 #include "../src/MicProcessor.hpp"
+#include "../src/ProcessTap.hpp"
 #include "../src/Routing.hpp"
 
 #include <algorithm>
@@ -1409,6 +1410,47 @@ void ApiTests()
         std::free(text);
         BKCallCaptureDestroy(capture);
     }
+    {
+        const char* ids[] = {"com.apple.avconferenced", "", nullptr, "com.apple.TelephonyUtilities"};
+        BKCallCaptureOptions options = {};
+        options.label = "api";
+        options.callBundleID = "com.apple.FaceTime";
+        options.callProcessBundleIDs = ids;
+        options.callProcessBundleIDCount = 4;
+        BKCallCapture* capture = BKCallCaptureCreate(&options,
+            [](void*, const float*, const float*, uint32_t, uint64_t) {}, nullptr, nullptr);
+        char* text = BKCallCaptureDiagnostics(capture);
+        Check(text &&
+                std::strcmp(text, "stopped call=com.apple.avconferenced,com.apple.TelephonyUtilities") == 0,
+            "callProcessBundleIDs taps those processes, not the bundle ID, skipping empty ones");
+        std::free(text);
+        BKCallCaptureDestroy(capture);
+        options.callSystemAudio = true;
+        capture = BKCallCaptureCreate(&options,
+            [](void*, const float*, const float*, uint32_t, uint64_t) {}, nullptr, nullptr);
+        text = BKCallCaptureDiagnostics(capture);
+        Check(text && std::strstr(text, "call=system-audio"), "callSystemAudio wins over processes");
+        std::free(text);
+        BKCallCaptureDestroy(capture);
+        options.callSystemAudio = false;
+        options.callProcessBundleIDCount = 0;
+        capture = BKCallCaptureCreate(&options,
+            [](void*, const float*, const float*, uint32_t, uint64_t) {}, nullptr, nullptr);
+        text = BKCallCaptureDiagnostics(capture);
+        Check(text && std::strcmp(text, "stopped call=com.apple.FaceTime") == 0,
+            "a zero count leaves the app target alone");
+        std::free(text);
+        BKCallCaptureDestroy(capture);
+    }
+    {
+        TapTarget app{"com.example.call"};
+        TapTarget daemons{"", std::nullopt, false, {"com.apple.avconferenced"}};
+        TapTarget system{"", std::nullopt, true, {"com.apple.avconferenced"}};
+        Check(!app.ByProcess() && app.Name() == "com.example.call", "an app target is by owner");
+        Check(daemons.ByProcess() && daemons.Name() == "com.apple.avconferenced",
+            "a process target is by the process's own bundle ID");
+        Check(!system.ByProcess(), "system audio is never by process");
+    }
     Check(BKCallCaptureCreate(nullptr, nullptr, nullptr, nullptr) == nullptr,
         "no options, no capture");
     {
@@ -1417,6 +1459,12 @@ void ApiTests()
         Check(BKProbesSet(probes, "[]", error, sizeof error), "an empty probe list is accepted");
         Check(!BKProbesSet(probes, "[{\"nope\":1}]", error, sizeof error) && error[0],
             "a probe without a bundle ID is refused with a message");
+        Check(BKProbesSet(probes, "[{\"processBundleIDs\":[\"com.apple.avconferenced\"]}]", error,
+                  sizeof error),
+            "a probe of processes by bundle ID is accepted");
+        Check(!BKProbesSet(probes, "[{\"processBundleIDs\":[]}]", error, sizeof error) && error[0],
+            "a probe of no processes is refused");
+        BKProbesSet(probes, "[]", error, sizeof error);
         float levels[4];
         Check(BKProbesLevels(probes, levels, 4) == 0, "no probes, no levels");
         BKProbesDestroy(probes);
@@ -1478,6 +1526,36 @@ void LiveTests()
         std::free(text);
         BKCallCaptureStop(capture);
         Check(frames > 48000, "live capture delivered about two seconds", double(frames));
+    }
+    BKCallCaptureDestroy(capture);
+
+    // FaceTime's call audio plays from a daemon no app owns. Idle, the tap carries silence.
+    Check(ProcessTap::Matching(TapTarget{"", std::nullopt, false, {"com.apple.avconferenced"}}, {})
+                  .size() == 1,
+        "avconferenced is one process a process target matches");
+    Check(ProcessTap::Matching(TapTarget{"com.apple.avconferenced"}, {}).empty(),
+        "and one an app target does not");
+    const char* ids[] = {"com.apple.avconferenced"};
+    options = {};
+    options.label = "live";
+    options.callProcessBundleIDs = ids;
+    options.callProcessBundleIDCount = 1;
+    frames = 0;
+    capture = BKCallCaptureCreate(&options,
+        [](void* context, const float*, const float*, uint32_t n, uint64_t) {
+            static_cast<std::atomic<uint64_t>*>(context)->fetch_add(n);
+        },
+        nullptr, &frames);
+    const BKStartResult daemon = BKCallCaptureStart(capture);
+    Check(daemon == BKStartStarted, "a tap of avconferenced starts", double(daemon));
+    if (daemon == BKStartStarted) {
+        Sleep(2000);
+        char* text = BKCallCaptureDiagnostics(capture);
+        std::printf("     %s\n", text);
+        Check(text && std::strstr(text, "call-tap=on"), "and the call tap is on");
+        std::free(text);
+        BKCallCaptureStop(capture);
+        Check(frames > 48000, "and delivered about two seconds", double(frames));
     }
     BKCallCaptureDestroy(capture);
 }

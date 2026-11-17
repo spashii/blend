@@ -25,6 +25,8 @@ public:
         std::optional<std::string> instance;
         // Everything the Mac plays but this process; bundleID and instance are ignored.
         bool system = false;
+        // Core Audio processes by their own bundle ID (see TapTarget).
+        std::vector<std::string> processBundleIDs;
     };
 
     // Taps are named "<label>: <bundle id>", which other apps' audio lists show.

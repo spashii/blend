@@ -7,6 +7,9 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 #ifndef BLEND_KIT_VERSION
 #define BLEND_KIT_VERSION "0.0.0"
@@ -71,6 +74,11 @@ BKCallCapture* BKCallCaptureCreate(const BKCallCaptureOptions* options, BKFrames
         copy.callInstance = options->callInstance;
     }
     copy.callSystemAudio = options->callSystemAudio;
+    for (size_t i = 0; options->callProcessBundleIDs && i < options->callProcessBundleIDCount; i++) {
+        if (const char* id = options->callProcessBundleIDs[i]; id && *id) {
+            copy.callProcessBundleIDs.emplace_back(id);
+        }
+    }
     copy.outputRate = options->outputRate;
     auto result = new BKCallCapture;
     result->capture = std::make_unique<blend::CallCapture>(std::move(copy),
@@ -121,6 +129,15 @@ bool BKProbesSet(BKProbes* probes, const char* json, char* error, size_t errorSi
         for (const auto& item : nlohmann::json::parse(json ? json : "[]")) {
             if (item.value("systemAudio", false)) {
                 targets.push_back({"", std::nullopt, true});
+                continue;
+            }
+            if (item.contains("processBundleIDs")) {
+                auto ids = item.at("processBundleIDs").get<std::vector<std::string>>();
+                std::erase(ids, std::string());
+                if (ids.empty()) {
+                    throw std::invalid_argument("processBundleIDs is empty");
+                }
+                targets.push_back({"", std::nullopt, false, std::move(ids)});
                 continue;
             }
             std::optional<std::string> instance;

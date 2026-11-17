@@ -11,7 +11,7 @@ namespace blend {
 struct Probes::Probe : FrameSink
 {
     Probe(Target target, const std::string& label)
-        : tap(TapTarget{target.bundleID, target.instance, target.system}, label)
+        : tap(TapTarget{target.bundleID, target.instance, target.system, target.processBundleIDs}, label)
         , system(target.system)
     {
     }

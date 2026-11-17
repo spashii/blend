@@ -22,6 +22,9 @@ public final class LevelProbes: @unchecked Sendable {
     public func set(_ targets: [TapTarget]) {
         let rows = targets.map { target -> [String: Any] in
             if target.isSystemAudio { return ["systemAudio": true] }
+            if !target.processBundleIDs.isEmpty {
+                return ["processBundleIDs": target.processBundleIDs]
+            }
             var row: [String: Any] = ["bundleID": target.bundleID]
             if let instance = target.instance { row["instance"] = instance }
             return row

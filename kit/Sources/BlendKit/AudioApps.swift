@@ -58,6 +58,9 @@ public struct TapTarget: Sendable, Hashable {
     /// Everything the Mac plays except this app, and except Blend Mic, whose output carries
     /// its mixes. bundleID and instance are ignored.
     public private(set) var isSystemAudio: Bool
+    /// Core Audio processes by their own bundle ID, whoever owns them; empty for an app or
+    /// system audio. See `processes(_:)`.
+    public private(set) var processBundleIDs: [String] = []
 
     public init(bundleID: String, instance: String? = nil) {
         self.bundleID = bundleID
@@ -72,4 +75,16 @@ public struct TapTarget: Sendable, Hashable {
         target.isSystemAudio = true
         return target
     }()
+
+    /// The Core Audio processes whose own bundle ID is one of these, including system
+    /// daemons that no app owns: FaceTime's call audio plays from `com.apple.avconferenced`.
+    /// An app target covers only processes a regular app owns. Processes that start later
+    /// are followed, as for an app. The tap is named after the IDs joined by ",", which is
+    /// also `bundleID`; instance is ignored. Empty IDs are dropped.
+    public static func processes(_ bundleIDs: [String]) -> TapTarget {
+        let ids = bundleIDs.filter { !$0.isEmpty }
+        var target = TapTarget(bundleID: ids.joined(separator: ","))
+        target.processBundleIDs = ids
+        return target
+    }
 }

@@ -92,6 +92,22 @@ private let kitFolder = URL(fileURLWithPath: #filePath)
         #expect(app.diagnostics.contains("call=us.zoom.xos"))
     }
 
+    @Test func processesReachTheEngine() {
+        let target = TapTarget.processes(
+            ["com.apple.avconferenced", "", "com.apple.TelephonyUtilities"])
+        #expect(target.processBundleIDs == ["com.apple.avconferenced", "com.apple.TelephonyUtilities"])
+        #expect(!target.isSystemAudio)
+        #expect(target.instance == nil)
+        #expect(target.bundleID == "com.apple.avconferenced,com.apple.TelephonyUtilities")
+        #expect(target != TapTarget(bundleID: target.bundleID))
+        #expect(TapTarget(bundleID: "us.zoom.xos").processBundleIDs.isEmpty)
+        #expect(TapTarget.systemAudio.processBundleIDs.isEmpty)
+        let capture = CallCapture(
+            options: CallCaptureOptions(label: "Test", call: target),
+            frames: { _, _, _ in }, events: { _ in })
+        #expect(capture.diagnostics == "stopped call=com.apple.avconferenced,com.apple.TelephonyUtilities")
+    }
+
     @Test func mapsEveryEvent() {
         let kinds: [(BKEventKind, CallCapture.Event)] = [
             (BKEventMicrophoneRestarted, .microphoneRestarted),
@@ -156,5 +172,13 @@ private let kitFolder = URL(fileURLWithPath: #filePath)
         probes.set([])
         #expect(probes.levels().isEmpty)
         probes.mute(index: 3, true)
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["BLENDKIT_LIVE"] == "1"))
+    func probesADaemonByProcess() {
+        let probes = LevelProbes(label: "Test")
+        probes.set([.processes(["com.apple.avconferenced"])])
+        #expect(probes.levels().count == 1)
+        probes.set([])
     }
 }

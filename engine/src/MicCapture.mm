@@ -96,7 +96,7 @@ bool MicCapture::AddReference()
         processes_ = TargetProcesses();
         description = [[CATapDescription alloc] initStereoMixdownOfProcesses:Numbers(processes_)];
         description.name = [NSString
-            stringWithFormat:@"%s: %s", options_.tapPrefix.c_str(), options_.target.bundleID.c_str()];
+            stringWithFormat:@"%s: %s", options_.tapPrefix.c_str(), options_.target.Name().c_str()];
     } else {
         AudioObjectID blend = kAudioObjectUnknown;
         pid_t pid = getpid();

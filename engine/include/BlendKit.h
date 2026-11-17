@@ -89,6 +89,12 @@ typedef struct
     // so with echo cancellation on, Me is cleaned of all of it. A host that records only
     // the microphone, cleaned of what the Mac plays, sets this and ignores Call.
     bool callSystemAudio;
+    // When the count is not zero, Call is the Core Audio processes whose own bundle ID is
+    // one of these, whoever owns them, including system daemons such as FaceTime's
+    // com.apple.avconferenced; callBundleID and callInstance are ignored. The tap is named
+    // after them, joined by ",". callSystemAudio wins over this.
+    const char* const* callProcessBundleIDs;
+    size_t callProcessBundleIDCount;
 } BKCallCaptureOptions;
 
 // Me and Call are mono, at outputRate, for the same instants. `position` counts output
@@ -114,8 +120,9 @@ char* BKCallCaptureDiagnostics(BKCallCapture* capture);
 
 // Meters app copies without capturing them for anything else.
 BKProbes* BKProbesCreate(const char* label);
-// `json` is an array of {"bundleID", "instance"} (instance optional), or {"systemAudio": true}
-// for everything the Mac plays but this process and Blend Mic; an empty array stops
+// `json` is an array of {"bundleID", "instance"} (instance optional), {"processBundleIDs":
+// [...]} for Core Audio processes by their own bundle ID (as callProcessBundleIDs), or
+// {"systemAudio": true} for everything the Mac plays but this process and Blend Mic; an empty array stops
 // metering. On a parse failure returns false and writes a message into error.
 bool BKProbesSet(BKProbes* probes, const char* json, char* error, size_t errorSize);
 // Peak since the previous call for each probed copy, in the order given, 0 to 1. Returns

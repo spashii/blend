@@ -26,6 +26,18 @@ NSArray<NSNumber*>* Numbers(const std::vector<AudioObjectID>& objects)
 
 } // namespace
 
+std::string TapTarget::Name() const
+{
+    if (!ByProcess()) {
+        return bundleID;
+    }
+    std::string name;
+    for (const auto& id : processBundleIDs) {
+        name += (name.empty() ? "" : ",") + id;
+    }
+    return name;
+}
+
 ProcessTap::ProcessTap(TapTarget target, std::string namePrefix)
     : target_(std::move(target))
     , namePrefix_(std::move(namePrefix))
@@ -55,7 +67,8 @@ OSStatus ProcessTap::IOProc(AudioObjectID, const AudioTimeStamp*, const AudioBuf
 
 // Every audio process whose owning app copy is this tap's app, and, with an instance, the
 // copy launched with that identity. For system audio: this process, whose output carries
-// the mixes, and every process of the excluded app copies.
+// the mixes, and every process of the excluded app copies. By process: every process whose
+// own bundle ID is listed.
 std::vector<AudioObjectID> ProcessTap::Matching(const TapTarget& target,
     const std::vector<int>& excludedOwners)
 {
@@ -69,6 +82,14 @@ std::vector<AudioObjectID> ProcessTap::Matching(const TapTarget& target,
             if (pid == getpid() ||
                 (owner && std::find(excludedOwners.begin(), excludedOwners.end(), owner) !=
                         excludedOwners.end())) {
+                matches.push_back(object);
+            }
+            continue;
+        }
+        if (target.ByProcess()) {
+            const std::string id = hal::GetString(object, kAudioProcessPropertyBundleID);
+            if (std::find(target.processBundleIDs.begin(), target.processBundleIDs.end(), id) !=
+                target.processBundleIDs.end()) {
                 matches.push_back(object);
             }
             continue;
@@ -98,7 +119,7 @@ bool ProcessTap::Start(FrameSink& sink)
         : [[CATapDescription alloc] initStereoMixdownOfProcesses:Numbers(processes_)];
     description.name = target_.system
         ? [NSString stringWithFormat:@"%s: system audio", namePrefix_.c_str()]
-        : [NSString stringWithFormat:@"%s: %s", namePrefix_.c_str(), target_.bundleID.c_str()];
+        : [NSString stringWithFormat:@"%s: %s", namePrefix_.c_str(), target_.Name().c_str()];
     description.privateTap = YES;
     description.muteBehavior = muted_ ? CATapMuted : CATapUnmuted;
     if (AudioHardwareCreateProcessTap(description, &tap_) != noErr) {

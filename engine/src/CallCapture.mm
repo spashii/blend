@@ -262,7 +262,8 @@ private:
 
     TapTarget Target() const
     {
-        return TapTarget{options_.callBundleID, options_.callInstance, options_.callSystemAudio};
+        return TapTarget{options_.callBundleID, options_.callInstance, options_.callSystemAudio,
+            options_.callProcessBundleIDs};
     }
 
     const CallCaptureOptions options_;
@@ -567,7 +568,10 @@ std::string CallCapture::Diagnostics()
         const State& s = *state_;
         std::ostringstream out;
         out << (s.running ? "running" : "stopped") << " call="
-            << (options_.callSystemAudio ? "system-audio" : options_.callBundleID);
+            << (options_.callSystemAudio ? "system-audio"
+                                         : TapTarget{options_.callBundleID, std::nullopt, false,
+                                               options_.callProcessBundleIDs}
+                                               .Name());
         if (s.running) {
             out << " microphone=" << s.microphoneUID << " call-tap="
                 << (s.withTap ? "on" : (s.tapLost ? "lost" : "off"));

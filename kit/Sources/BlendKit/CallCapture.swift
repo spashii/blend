@@ -23,7 +23,8 @@ public struct CallCaptureOptions: Sendable {
     public var microphoneUID: String?
     public var echoCancellation: EchoCancellation
     public var isolation: Isolation
-    /// The call app, or `.systemAudio` for everything the Mac plays. Call is what this
+    /// The call app, `.processes(_:)` for a call that plays from system daemons, such as
+    /// FaceTime, or `.systemAudio` for everything the Mac plays. Call is what this
     /// carries, and echo cancellation cleans the microphone of it; a host that wants only
     /// the microphone, free of what the Mac plays, uses `.systemAudio` and ignores Call.
     public var call: TapTarget
@@ -122,13 +123,18 @@ public final class CallCapture: @unchecked Sendable {
             withOptionalCString(options.microphoneUID) { microphone in
                 options.call.bundleID.withCString { bundleID in
                     withOptionalCString(options.call.instance) { instance in
-                        var c = BKCallCaptureOptions(
-                            label: label, microphoneUID: microphone, echo: echo,
-                            isolation: isolation, callBundleID: bundleID, callInstance: instance,
-                            outputRate: UInt32(max(0, options.outputRate)),
-                            callSystemAudio: options.call.isSystemAudio)
-                        return BKCallCaptureCreate(
-                            &c, Self.deliverFrames, Self.deliverEvent, retained.toOpaque())
+                        withCStrings(options.call.processBundleIDs) { processes in
+                            var c = BKCallCaptureOptions(
+                                label: label, microphoneUID: microphone, echo: echo,
+                                isolation: isolation, callBundleID: bundleID,
+                                callInstance: instance,
+                                outputRate: UInt32(max(0, options.outputRate)),
+                                callSystemAudio: options.call.isSystemAudio,
+                                callProcessBundleIDs: processes.baseAddress,
+                                callProcessBundleIDCount: processes.count)
+                            return BKCallCaptureCreate(
+                                &c, Self.deliverFrames, Self.deliverEvent, retained.toOpaque())
+                        }
                     }
                 }
             }
@@ -195,6 +201,15 @@ extension CallCapture.Event {
         default: return nil
         }
     }
+}
+
+private func withCStrings<R>(
+    _ strings: [String], _ body: (UnsafeBufferPointer<UnsafePointer<CChar>?>) -> R
+) -> R {
+    let copies = strings.map { strdup($0) }
+    defer { copies.forEach { free($0) } }
+    let pointers = copies.map { UnsafePointer($0) }
+    return pointers.withUnsafeBufferPointer(body)
 }
 
 private func withOptionalCString<R>(

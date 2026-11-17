@@ -19,12 +19,19 @@ namespace blend {
 // What to capture. An app means every audio process its app copy owns (see Apps.hpp),
 // following processes that start after capture began; with an instance, only the copy
 // launched with that identity. System means everything the Mac plays except this process
-// and the app copies given to SetExcludedOwners.
+// and the app copies given to SetExcludedOwners. Processes means every Core Audio process
+// whose own bundle ID is listed, whoever owns it: FaceTime's call audio plays from system
+// daemons, which no app copy owns. bundleID and instance are then ignored.
 struct TapTarget
 {
     std::string bundleID;
     std::optional<std::string> instance;
     bool system = false;
+    std::vector<std::string> processBundleIDs;
+
+    bool ByProcess() const { return !system && !processBundleIDs.empty(); }
+    // What the tap is named after: the bundle ID, or the process bundle IDs joined by ",".
+    std::string Name() const;
 };
 
 class ProcessTap

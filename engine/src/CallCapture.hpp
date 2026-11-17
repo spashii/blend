@@ -74,6 +74,8 @@ struct CallCaptureOptions
     MicProcessor::Isolation isolation = MicProcessor::Isolation::Off;
     std::string callBundleID;
     std::optional<std::string> callInstance;
+    // Instead of an app, the Core Audio processes with these bundle IDs (see TapTarget).
+    std::vector<std::string> callProcessBundleIDs;
     // Call is everything the Mac plays, except this process and Blend Mic, instead of one
     // app. It is also the far end, so echo cancellation cleans the microphone of all of it.
     bool callSystemAudio = false;
