@@ -38,7 +38,9 @@ if $publish || $prerelease; then
   [[ -z $(git status --porcelain) ]] || { print -u2 "Commit everything first."; exit 1 }
   git fetch -q origin
   [[ $(git rev-parse HEAD) == $(git rev-parse "@{u}") ]] || { print -u2 "Push HEAD first."; exit 1 }
-  gh auth status >/dev/null
+  # Only the account gh uses: another saved login with a stale token makes a plain
+  # "gh auth status" fail and has nothing to do with this release.
+  gh auth status --active >/dev/null
   if [[ -n $(gh release list --json tagName -q ".[] | select(.tagName == \"$tag\")") ]]; then
     print -u2 "$tag is already released; raise VERSION."
     exit 1
