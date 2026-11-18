@@ -458,6 +458,9 @@ struct World
     std::atomic<bool> playing{true};
     std::atomic<bool> callTone{true};
     std::atomic<double> rate{48000};
+    // The microphone's input channels: one beamformed, three raw while another app holds
+    // voice processing.
+    std::atomic<int> micChannels{1};
     std::atomic<int> backends{0};
     std::atomic<int> starts{0};
     std::atomic<bool> unpaced{false};
@@ -545,6 +548,7 @@ public:
             return false;
         }
         rate_ = world_.rate;
+        channels_ = world_.micChannels;
         sink_ = &sink;
         deadTap_ = world_.starts >= world_.deadFrom && world_.starts < world_.deadUntil;
         world_.tapDies = false;
@@ -586,7 +590,10 @@ public:
         world_.backends--;
     }
 
-    bool NeedsRestart() const override { return running_ && world_.rate != rate_; }
+    bool NeedsRestart() const override
+    {
+        return running_ && (world_.rate != rate_ || world_.micChannels != channels_);
+    }
 
 private:
     static void Emit(void* context, const float* me, const float* farEnd, uint32_t frames)
@@ -655,6 +662,7 @@ private:
     const BackendRequest request_;
     FrameSink* sink_ = nullptr;
     double rate_ = 0;
+    int channels_ = 1;
     bool deadTap_ = false;
     bool stalls_ = false;
     std::atomic<bool> running_{false};
@@ -1112,6 +1120,31 @@ void RecoveryTests()
         std::lock_guard lock(stream.mutex);
         Check(Rms(stream.call, stream.call.size() - 4800, 4800) > 0.1,
             "Call carries the app at the end", Rms(stream.call, stream.call.size() - 4800, 4800));
+    });
+
+    WithinTime("voice processing switching the microphone's channels rebuilds the capture at once", 20, [] {
+        World world;
+        Stream stream;
+        auto capture = MakeCapture(world, stream);
+        capture->Start();
+        Sleep(200);
+        // Another app turns voice processing on: the built-in microphone goes raw. Its own
+        // listener reports it, as MicCapture's stream configuration listener does.
+        world.micChannels = 3;
+        world.TriggerRate();
+        WaitUntil([&] { return world.starts >= 2; }, 2);
+        Check(world.starts == 2, "the capture is rebuilt for the new channels", world.starts);
+        world.micChannels = 1;
+        world.TriggerRate();
+        WaitUntil([&] { return world.starts >= 3; }, 2);
+        Sleep(200);
+        capture->Stop();
+        Check(world.starts == 3, "and again when voice processing ends", world.starts);
+        Check(stream.Contiguous(), "frames are continuous across both");
+        Check(stream.EventIndex("callDropped") < 0, "no part of the call is lost to it");
+        std::lock_guard lock(stream.mutex);
+        Check(Rms(stream.call, stream.call.size() - 4800, 4800) > 0.1,
+            "Call carries the app after", Rms(stream.call, stream.call.size() - 4800, 4800));
     });
 
     WithinTime("a tap that dies mid-call is dropped from where Call was last heard", 20, [] {

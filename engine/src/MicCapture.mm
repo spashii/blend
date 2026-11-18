@@ -146,31 +146,37 @@ void MicCapture::WatchRates()
     if (!options_.queue || !options_.onRateChange) {
         return;
     }
-    auto address = hal::Address(kAudioDevicePropertyNominalSampleRate);
     // The aggregate has a rate of its own, and the host labels what it receives with it.
-    std::vector<AudioObjectID> devices{device_};
+    std::vector<std::pair<AudioObjectID, AudioObjectPropertyAddress>> watched{
+        {device_, hal::Address(kAudioDevicePropertyNominalSampleRate)}};
     if (ioDevice_ != device_) {
-        devices.push_back(ioDevice_);
+        watched.push_back({ioDevice_, hal::Address(kAudioDevicePropertyNominalSampleRate)});
     }
-    for (AudioObjectID device : devices) {
+    // Another app turning Apple's voice processing on or off changes the built-in
+    // microphone's channels (one beamformed, three raw), and a call tap sharing the
+    // aggregate can stop delivering at that moment, for seconds until a probe proves it dead.
+    // NeedsRestart sees the new count, so the capture is rebuilt right away instead.
+    watched.push_back({device_, AudioObjectPropertyAddress{kAudioDevicePropertyStreamConfiguration,
+                                    kAudioObjectPropertyScopeInput, kAudioObjectPropertyElementMain}});
+    for (auto& [device, address] : watched) {
         // The block owns a copy of the callback, so one still queued when Stop runs is safe.
         auto callback = options_.onRateChange;
         AudioObjectPropertyListenerBlock block =
             ^(UInt32, const AudioObjectPropertyAddress*) { callback(); };
         if (AudioObjectAddPropertyListenerBlock(device, &address, options_.queue, block) ==
             noErr) {
-            rateListeners_.emplace_back(device, (__bridge_retained void*)block);
+            rateListeners_.push_back({device, address, (__bridge_retained void*)block});
         }
     }
 }
 
 void MicCapture::UnwatchRates()
 {
-    auto address = hal::Address(kAudioDevicePropertyNominalSampleRate);
-    for (auto& [device, retained] : rateListeners_) {
-        auto block = (__bridge AudioObjectPropertyListenerBlock)retained;
-        AudioObjectRemovePropertyListenerBlock(device, &address, options_.queue, block);
-        CFBridgingRelease(retained);
+    for (auto& listener : rateListeners_) {
+        auto block = (__bridge AudioObjectPropertyListenerBlock)listener.block;
+        AudioObjectRemovePropertyListenerBlock(listener.device, &listener.address, options_.queue,
+            block);
+        CFBridgingRelease(listener.block);
     }
     rateListeners_.clear();
 }
@@ -239,6 +245,11 @@ bool MicCapture::NeedsRestart() const
         return false;
     }
     if (hal::DeviceForUID(options_.uid) != device_ || hal::NominalRate(device_) != rate_) {
+        return true;
+    }
+    // Voice processing in another app switched the microphone between its beamformed and
+    // raw channels (see WatchRates).
+    if (hal::ChannelCount(device_, kAudioObjectPropertyScopeInput) != micChannels_) {
         return true;
     }
     // The aggregate labels what the host receives, so its own rate has to hold still.

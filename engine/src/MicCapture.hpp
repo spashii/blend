@@ -54,7 +54,8 @@ public:
         std::vector<std::string> excludedApps;
         std::string tapPrefix;
         // Called on `queue` as soon as the device's or the aggregate's sample rate changes,
-        // so a host need not wait for its next NeedsRestart poll. Not set: not watched.
+        // or the microphone's channels do, so a host need not wait for its next NeedsRestart
+        // poll. Not set: not watched.
         dispatch_queue_t queue = nullptr;
         std::function<void()> onRateChange;
     };
@@ -114,8 +115,15 @@ private:
     double rate_ = 0;
     double ioRate_ = 0;
     std::unique_ptr<MicProcessor> processor_;
-    // Nominal-rate listeners: each device with its retained AudioObjectPropertyListenerBlock.
-    std::vector<std::pair<AudioObjectID, void*>> rateListeners_;
+    // Rate and channel listeners: each device and property with its retained
+    // AudioObjectPropertyListenerBlock.
+    struct Listener
+    {
+        AudioObjectID device;
+        AudioObjectPropertyAddress address;
+        void* block;
+    };
+    std::vector<Listener> rateListeners_;
 };
 
 } // namespace blend
