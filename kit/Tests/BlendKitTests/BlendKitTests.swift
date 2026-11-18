@@ -126,6 +126,13 @@ private let kitFolder = URL(fileURLWithPath: #filePath)
         #expect(CallCapture.Event(kind: BKEventKind(rawValue: 99), detail: nil) == nil)
     }
 
+    @Test func readsTheFrameACallWasDroppedAndCameBackAt() {
+        #expect(CallCapture.Event(kind: BKEventCallDropped, detail: "96000") == .callDropped(at: 96000))
+        #expect(CallCapture.Event(kind: BKEventCallBack, detail: "480000") == .callBack(at: 480000))
+        // A detail that is not a number dates the event from the start, never drops it.
+        #expect(CallCapture.Event(kind: BKEventCallDropped, detail: nil) == .callDropped(at: 0))
+    }
+
     @Test func deliversFramesAndEventsThroughTheTrampolines() {
         final class Seen: @unchecked Sendable {
             var me: [Float] = []

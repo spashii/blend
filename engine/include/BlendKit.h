@@ -66,6 +66,14 @@ typedef enum
     // how many.
     BKEventOverflow = 8,
     BKEventAudioServiceRestarted = 9,
+    // Call stopped carrying the call app while the app went on playing: a tap a second tap
+    // proved dead, or a capture left running without its tap. detail is the output frame,
+    // counted as the frames callback's position, from which Call is missing. Until
+    // BKEventCallBack the far end reaches only the microphone, so a host that labels Me as
+    // the person speaking should not, from that frame on.
+    BKEventCallDropped = 10,
+    // Call carries the app again. detail is the output frame from which it does.
+    BKEventCallBack = 11,
 } BKEventKind;
 
 // Zero-initialise it, `= {}` in C++ or memset, so fields a host does not set are off.

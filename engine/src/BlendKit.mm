@@ -44,6 +44,8 @@ BKEventKind Kind(blend::CallEvent event)
     case blend::CallEvent::EchoCancellationFailed: return BKEventEchoCancellationFailed;
     case blend::CallEvent::Overflow: return BKEventOverflow;
     case blend::CallEvent::AudioServiceRestarted: return BKEventAudioServiceRestarted;
+    case blend::CallEvent::CallDropped: return BKEventCallDropped;
+    case blend::CallEvent::CallBack: return BKEventCallBack;
     }
     return BKEventOverflow;
 }

@@ -133,13 +133,24 @@ struct Stream
         sizes.push_back(n);
     }
 
-    void Event(CallEvent event, const std::string&)
+    std::vector<std::string> details;
+
+    void Event(CallEvent event, const std::string& detail)
     {
         static const char* names[] = {"microphoneRestarted", "microphoneLost", "callTapLost",
             "callTapRestored", "callSilent", "callHeard", "echoCancellationFailed", "overflow",
-            "audioServiceRestarted"};
+            "audioServiceRestarted", "callDropped", "callBack"};
         std::lock_guard lock(mutex);
         events.push_back(names[int(event)]);
+        details.push_back(detail);
+    }
+
+    // The detail of the first event of this name, or "" when there is none.
+    std::string Detail(const std::string& name)
+    {
+        std::lock_guard lock(mutex);
+        auto it = std::find(events.begin(), events.end(), name);
+        return it == events.end() ? std::string() : details[size_t(it - events.begin())];
     }
 
     // Every chunk starts where the one before it ended.
@@ -1101,6 +1112,75 @@ void RecoveryTests()
         std::lock_guard lock(stream.mutex);
         Check(Rms(stream.call, stream.call.size() - 4800, 4800) > 0.1,
             "Call carries the app at the end", Rms(stream.call, stream.call.size() - 4800, 4800));
+    });
+
+    WithinTime("a tap that dies mid-call is dropped from where Call was last heard", 20, [] {
+        World world;
+        Stream stream;
+        auto capture = MakeCapture(world, stream);
+        capture->Start();
+        Sleep(300);
+        const double died = double(world.pushedFrames.load());
+        world.tapDies = true;
+        WaitUntil([&] { return stream.EventIndex("callBack") >= 0; });
+        Sleep(100);
+        capture->Stop();
+        const int dropped = stream.EventIndex("callDropped");
+        const int back = stream.EventIndex("callBack");
+        Check(dropped >= 0 && back > dropped, "the call is dropped, then back", back);
+        const double from = std::stod(stream.Detail("callDropped"));
+        const double to = std::stod(stream.Detail("callBack"));
+        // Dated from the last tick that heard Call: at most a tick and a block before the
+        // death, never after it.
+        Check(from <= died + 480 && from >= died - 48000 * 0.1,
+            "the drop is dated where Call went silent", (from - died) / 48);
+        Check(to > from, "and the return after it", to - from);
+        std::lock_guard lock(stream.mutex);
+        int droppedCount = int(std::count(stream.events.begin(), stream.events.end(), "callDropped"));
+        Check(droppedCount == 1, "one drop is reported once", droppedCount);
+        // Call is silent between the two, and carries the app after. The return is dated at
+        // the end of the tick that heard it, so the last tick before it may hold sound.
+        size_t loud = 0;
+        for (size_t i = size_t(from) + 4800; i + 2 * 960 < size_t(to) && i < stream.call.size(); i++) {
+            loud += stream.call[i] != 0.0f;
+        }
+        Check(loud == 0, "Call is silent while dropped", double(loud));
+        Check(Rms(stream.call, stream.call.size() - 4800, 4800) > 0.1,
+            "Call carries the app once back", Rms(stream.call, stream.call.size() - 4800, 4800));
+    });
+
+    WithinTime("a pause in the call is not a drop", 20, [] {
+        World world;
+        Stream stream;
+        auto capture = MakeCapture(world, stream);
+        capture->Start();
+        Sleep(300);
+        // The app keeps its output open and plays zeros, as a call app does while nobody
+        // speaks: the probe hears nothing either.
+        world.callTone = false;
+        Sleep(800);
+        world.callTone = true;
+        Sleep(300);
+        capture->Stop();
+        Check(stream.EventIndex("callDropped") < 0, "silence the probe also hears is not a drop");
+        Check(world.starts == 1, "and nothing is rebuilt", world.starts);
+    });
+
+    WithinTime("a capture left without its tap drops the call until it is heard", 20, [] {
+        World world;
+        Stream stream;
+        auto capture = MakeCapture(world, stream);
+        capture->Start();
+        WaitUntil([&] { return world.pushedFrames > 48000 * 0.3; });
+        world.tapBlocked = true;
+        world.Trigger(SystemChange::ServiceRestarted);
+        WaitUntil([&] { return stream.EventIndex("callTapLost") >= 0; });
+        Check(stream.EventIndex("callDropped") >= 0, "running without the tap drops the call");
+        world.tapBlocked = false;
+        WaitUntil([&] { return stream.EventIndex("callBack") >= 0; });
+        capture->Stop();
+        Check(stream.EventIndex("callBack") > stream.EventIndex("callTapRestored"),
+            "the call is back once its sound is, after the tap is");
     });
 
     WithinTime("a rebuild that comes up dead is retried until one works", 30, [] {

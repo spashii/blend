@@ -370,6 +370,10 @@ struct CallCapture::State
     double nextDeadRebuild = 0;
     double deadDelay = 0;
     uint64_t deadRebuilds = 0;
+    // Call has been reported dropped (CallDropped) and not yet back. lastHeardAt is the
+    // output position at the last tick that heard Call, where a drop is dated from.
+    bool dropped = false;
+    uint64_t lastHeardAt = 0;
     std::string microphoneUID;
     double missingSince = -1;
     double lastAttempt = 0;
@@ -461,6 +465,8 @@ CallStart CallCapture::Start()
         s.nextDeadRebuild = 0;
         s.deadDelay = timing_.deadRetry;
         s.deadRebuilds = 0;
+        s.dropped = false;
+        s.lastHeardAt = 0;
         s.tapDelay = timing_.retry;
         if (!s.microphoneUID.empty() && StartBackend(true)) {
             result = CallStart::Started;
@@ -587,6 +593,9 @@ std::string CallCapture::Diagnostics()
             out << " restarts=" << s.restarts;
             if (s.deadRebuilds) {
                 out << " dead-tap-rebuilds=" << s.deadRebuilds;
+            }
+            if (s.dropped) {
+                out << " call-dropped-at=" << s.lastHeardAt;
             }
             if (s.probe) {
                 out << " probe=on";
@@ -732,6 +741,8 @@ void CallCapture::Reconcile(bool force, bool quiet)
         }
         s.tapLost = true;
         s.tapDead = false;
+        // The capture runs on without the call app from here.
+        DropCall(s.pipeline->Position());
     }
     if (!s.backend) {
         if (s.missingSince < 0) {
@@ -785,6 +796,9 @@ void CallCapture::Tick()
         return;
     }
     const bool heard = s.pipeline->TakeHeard();
+    if (heard) {
+        s.lastHeardAt = s.pipeline->Position();
+    }
     if (s.withTap) {
         const bool playing = environment_->CallIsPlaying();
         switch (s.silence.Tick(heard, playing, dt)) {
@@ -795,6 +809,11 @@ void CallCapture::Tick()
         WatchTap(heard, playing, now, dt);
         if (!s.backend) {
             return;
+        }
+        // Only sound proves the call is back: a rebuilt tap can come up dead.
+        if (s.dropped && heard && s.withTap) {
+            s.dropped = false;
+            Emit(CallEvent::CallBack, std::to_string(s.lastHeardAt));
         }
     } else {
         s.probe.reset();
@@ -894,7 +913,20 @@ void CallCapture::WatchTap(bool heard, bool playing, double now, double dt)
     if (++s.deadTicks < 2 || s.deadFor < timing_.deadAfter || now < s.nextDeadRebuild) {
         return;
     }
+    // The probe heard the app while Call was zeros: the far end has been reaching only the
+    // microphone since Call was last heard.
+    DropCall(s.lastHeardAt);
     RebuildDeadTap(now, timing_.deadRetryCeiling, true);
+}
+
+void CallCapture::DropCall(uint64_t at)
+{
+    State& s = *state_;
+    if (s.dropped) {
+        return;
+    }
+    s.dropped = true;
+    Emit(CallEvent::CallDropped, std::to_string(at));
 }
 
 void CallCapture::RebuildDeadTap(double now, double ceiling, bool known)

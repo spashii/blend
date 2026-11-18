@@ -80,6 +80,13 @@ public final class CallCapture: @unchecked Sendable {
         /// The frames closure fell about 4 seconds behind and frames were dropped.
         case overflow
         case audioServiceRestarted
+        /// Call stopped carrying the call app while the app went on playing, from this output
+        /// frame (counted as the frames closure's `position`): a tap a second tap proved dead,
+        /// or a capture left running without its tap. Until `callBack` the far end reaches
+        /// only the microphone, so Me can hold the other side's voice.
+        case callDropped(at: UInt64)
+        /// Call carries the app again from this output frame.
+        case callBack(at: UInt64)
     }
 
     /// `position` counts output frames since `start()`. The buffers are valid only during
@@ -198,6 +205,8 @@ extension CallCapture.Event {
         case BKEventEchoCancellationFailed: self = .echoCancellationFailed
         case BKEventOverflow: self = .overflow
         case BKEventAudioServiceRestarted: self = .audioServiceRestarted
+        case BKEventCallDropped: self = .callDropped(at: detail.flatMap { UInt64($0) } ?? 0)
+        case BKEventCallBack: self = .callBack(at: detail.flatMap { UInt64($0) } ?? 0)
         default: return nil
         }
     }

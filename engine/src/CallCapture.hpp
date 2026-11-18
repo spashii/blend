@@ -46,6 +46,13 @@ enum class CallEvent
     EchoCancellationFailed,
     Overflow,
     AudioServiceRestarted,
+    // Call stopped carrying the call app from the output frame in the detail, while the app
+    // went on playing: a tap the probe proved dead, or a capture running without its tap.
+    // Until CallBack, the far end reaches only the microphone, so a host cannot tell Me's
+    // sound from the call's.
+    CallDropped,
+    // Call carries the app again from the output frame in the detail.
+    CallBack,
 };
 
 enum class CallStart
@@ -236,6 +243,8 @@ private:
     void Reconcile(bool force, bool quiet = false);
     void Tick();
     void WatchTap(bool heard, bool playing, double now, double dt);
+    // Reports Call missing from output position `at`, once until it is back.
+    void DropCall(uint64_t at);
     void RebuildDeadTap(double now, double ceiling, bool known);
     bool StartBackend(bool callTap);
     void StopBackend();
